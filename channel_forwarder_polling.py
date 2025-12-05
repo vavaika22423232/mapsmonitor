@@ -7,8 +7,7 @@ Channel Forwarder з polling (опитування)
 
 import asyncio
 import logging
-from datetime import datetime
-import pytz
+import re
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
@@ -52,10 +51,91 @@ last_message_ids = {}
 # Клієнт з StringSession для Render
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
+# Мапінг регіонів на українську мову
+REGION_MAP = {
+    'Сумщина': 'Сумська обл.',
+    'Чернігівщина': 'Чернігівська обл.',
+    'Полтавщина': 'Полтавська обл.',
+    'Черкащина': 'Черкаська обл.',
+    'Київщина': 'Київська обл.',
+    'Харківщина': 'Харківська обл.',
+    'Дніпропетровщина': 'Дніпропетровська обл.',
+    'Миколаївщина': 'Миколаївська обл.',
+    'Одещина': 'Одеська обл.',
+    'Херсонщина': 'Херсонська обл.',
+    'Запорізька': 'Запорізька обл.',
+    'Донеччина': 'Донецька обл.',
+    'Луганщина': 'Луганська обл.',
+    'Житомирщина': 'Житомирська обл.',
+    'Вінниччина': 'Вінницька обл.',
+    'Хмельниччина': 'Хмельницька обл.',
+    'Рівненщина': 'Рівненська обл.',
+    'Волинь': 'Волинська обл.',
+    'Львівщина': 'Львівська обл.',
+    'Тернопільщина': 'Тернопільська обл.',
+    'Івано-Франківщина': 'Івано-Франківська обл.',
+    'Закарпаття': 'Закарпатська обл.',
+    'Кіровоградщина': 'Кіровоградська обл.'
+}
+
+
+def parse_and_split_message(text):
+    """
+    Розбиває повідомлення на окремі повідомлення по населених пунктах
+    """
+    if not text:
+        return [text]
+    
+    messages = []
+    lines = text.strip().split('\n')
+    current_region = None
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Перевіряємо чи це регіон
+        is_region = False
+        for region_key in REGION_MAP.keys():
+            if region_key in line and ':' in line:
+                current_region = REGION_MAP[region_key]
+                is_region = True
+                break
+        
+        if is_region:
+            continue
+        
+        # Парсимо рядки з БпЛА
+        if 'БпЛА' in line or 'БПЛА' in line:
+            # Витягуємо кількість (якщо є)
+            quantity_match = re.match(r'(\d+)х?\s*', line)
+            quantity = quantity_match.group(1) + 'х ' if quantity_match else ''
+            
+            # Витягуємо назву населеного пункту
+            # Шукаємо текст між кількістю та словом "курсом" або "БпЛА"/"БПЛА"
+            city_pattern = r'(?:БпЛА|БПЛА)\s+(?:курсом\s+)?(?:на\s+)?(.+?)(?:\s|$)'
+            city_match = re.search(city_pattern, line)
+            
+            if city_match:
+                city = city_match.group(1).strip()
+                # Очищаємо від зайвого
+                city = re.sub(r'\s*курсом.*$', '', city)
+                city = re.sub(r'\s*з\s+.*$', '', city)
+                
+                if current_region:
+                    message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+                else:
+                    message = f"{quantity}БПЛА {city} Загроза застосування БПЛА."
+                
+                messages.append(message)
+    
+    # Якщо не знайшли жодного повідомлення для розбиття, повертаємо оригінал
+    return messages if messages else [text]
+
 
 async def check_and_forward():
     """Перевірка нових повідомлень та пересилання"""
-    kyiv_tz = pytz.timezone('Europe/Kiev')
     forwarded_count = 0
     
     for channel in SOURCE_CHANNELS:
@@ -79,28 +159,32 @@ async def check_and_forward():
                     # Нове повідомлення!
                     logger.info(f"🆕 Нове повідомлення в @{channel}: ID {message.id}")
                     
-                    # Формуємо текст
-                    kyiv_time = datetime.now(kyiv_tz)
-                    text = f"📢 Джерело: @{channel}\n"
-                    text += f"⏰ {kyiv_time.strftime('%H:%M:%S %d.%m.%Y')} (Київ)\n"
-                    text += f"{'─' * 40}\n\n"
+                    # Розбиваємо повідомлення на окремі
+                    split_messages = parse_and_split_message(message.text)
                     
-                    if message.text:
-                        text += message.text
-                    
-                    # Пересилаємо
+                    # Пересилаємо кожне окреме повідомлення
                     try:
-                        if message.media:
-                            await client.send_message(
-                                TARGET_CHANNEL,
-                                text,
-                                file=message.media
-                            )
-                        else:
-                            await client.send_message(
-                                TARGET_CHANNEL,
-                                text
-                            )
+                        for split_msg in split_messages:
+                            if message.media:
+                                # Якщо є медіа, відправляємо тільки з першим повідомленням
+                                if split_msg == split_messages[0]:
+                                    await client.send_message(
+                                        TARGET_CHANNEL,
+                                        split_msg,
+                                        file=message.media
+                                    )
+                                else:
+                                    await client.send_message(
+                                        TARGET_CHANNEL,
+                                        split_msg
+                                    )
+                            else:
+                                await client.send_message(
+                                    TARGET_CHANNEL,
+                                    split_msg
+                                )
+                            # Невелика затримка між повідомленнями
+                            await asyncio.sleep(0.5)
                         
                         # Оновлюємо ID
                         last_message_ids[channel] = message.id
@@ -120,7 +204,6 @@ async def check_and_forward():
 async def main():
     """Головна функція"""
     logger.info("🚀 Запуск Channel Forwarder (Polling mode)...")
-    logger.info(f"🌐 Render Deploy - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Підключення з session string (без phone)
     await client.connect()
