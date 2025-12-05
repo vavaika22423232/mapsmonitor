@@ -79,12 +79,54 @@ REGION_MAP = {
 }
 
 
+def clean_text(text):
+    """
+    Очищає текст від зайвої інформації та посилань
+    """
+    if not text:
+        return text
+    
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Пропускаємо порожні рядки та рядки з лише пробілами/спецсимволами
+        if not line.strip() or line.strip() in ['ㅤ', '─' * len(line.strip())]:
+            continue
+        
+        # Пропускаємо рядки з "Підписатися", "ППОшник" тощо
+        skip_keywords = ['Підписатися', 'ППОшник', 'Підпис', 'Telegram', 'Channel']
+        if any(keyword in line for keyword in skip_keywords):
+            continue
+        
+        # Пропускаємо рядки що містять тільки стрілки та символи
+        if re.match(r'^[➡️⬅️↗️↘️↖️↙️⬆️⬇️\s]+$', line):
+            continue
+        
+        # Видаляємо посилання (URLs)
+        line = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', line)
+        
+        # Видаляємо @username
+        line = re.sub(r'@\w+', '', line)
+        
+        # Видаляємо зайві пробіли
+        line = ' '.join(line.split())
+        
+        if line.strip():
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
+
+
 def parse_and_split_message(text):
     """
     Розбиває повідомлення на окремі повідомлення по населених пунктах
     """
     if not text:
         return [text]
+    
+    # Спочатку очищаємо текст
+    text = clean_text(text)
     
     messages = []
     lines = text.strip().split('\n')
@@ -106,28 +148,38 @@ def parse_and_split_message(text):
         if is_region:
             continue
         
-        # Парсимо рядки з БпЛА
-        if 'БпЛА' in line or 'БПЛА' in line:
-            # Витягуємо кількість (якщо є)
-            quantity_match = re.match(r'(\d+)х?\s*', line)
-            quantity = quantity_match.group(1) + 'х ' if quantity_match else ''
+        # Парсимо рядки з БпЛА/шахедами
+        if any(keyword in line.lower() for keyword in ['бпла', 'бпла', 'шахед', 'шахід']):
+            # Витягуємо кількість та текст
+            # Формати: "2 шахеди на Чернігів", "2х БпЛА курсом на Київ", "БпЛА на Харків"
             
-            # Витягуємо назву населеного пункту
-            # Шукаємо текст між кількістю та словом "курсом" або "БпЛА"/"БПЛА"
-            city_pattern = r'(?:БпЛА|БПЛА)\s+(?:курсом\s+)?(?:на\s+)?(.+?)(?:\s|$)'
-            city_match = re.search(city_pattern, line)
-            
-            if city_match:
-                city = city_match.group(1).strip()
-                # Очищаємо від зайвого
-                city = re.sub(r'\s*курсом.*$', '', city)
-                city = re.sub(r'\s*з\s+.*$', '', city)
-                
-                if current_region:
-                    message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+            # Спроба 1: "число + шахед/шахедів/шахеди + на + місто"
+            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)?\s*(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
+            if not match:
+                # Спроба 2: "числох БпЛА на місто"
+                match = re.match(r'(\d+)х?\s*(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
+            if not match:
+                # Спроба 3: "БпЛА на місто" (без числа)
+                match = re.match(r'(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
+                if match:
+                    quantity = ''
+                    city = match.group(2).strip()
                 else:
-                    message = f"{quantity}БПЛА {city} Загроза застосування БПЛА."
-                
+                    continue
+            else:
+                quantity = match.group(1) + 'х ' if match.group(1) else ''
+                city = match.group(3).strip() if len(match.groups()) >= 3 else match.group(2).strip()
+            
+            # Очищаємо місто від зайвого
+            city = re.sub(r'\s*курсом.*$', '', city)
+            city = re.sub(r'\s*з\s+.*$', '', city)
+            city = city.strip()
+            
+            if city and current_region:
+                message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+                messages.append(message)
+            elif city:
+                message = f"{quantity}БПЛА {city} Загроза застосування БПЛА."
                 messages.append(message)
     
     # Якщо не знайшли жодного повідомлення для розбиття, повертаємо оригінал
