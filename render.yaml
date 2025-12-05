@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: telegram-forwarder
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python channel_forwarder_polling.py
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION
+        sync: false
+      - key: SOURCE_CHANNELS
+        value: UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik
+      - key: TARGET_CHANNEL
+        value: mapstransler
+      - key: POLL_INTERVAL
+        value: "30"
