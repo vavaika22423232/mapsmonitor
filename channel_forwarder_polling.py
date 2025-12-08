@@ -175,15 +175,13 @@ def parse_and_split_message(text):
             city = re.sub(r'\s*з\s+.*$', '', city)
             city = city.strip()
             
+            # Відправляємо тільки якщо є і місто, і регіон
             if city and current_region:
                 message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
                 messages.append(message)
-            elif city:
-                message = f"{quantity}БПЛА {city} Загроза застосування БПЛА."
-                messages.append(message)
     
-    # Якщо не знайшли жодного повідомлення для розбиття, повертаємо оригінал
-    return messages if messages else [text]
+    # Якщо не знайшли валідних повідомлень (з регіоном і містом), повертаємо пустий список
+    return messages
 
 
 async def check_and_forward():
@@ -214,9 +212,18 @@ async def check_and_forward():
                     # Розбиваємо повідомлення на окремі
                     split_messages = parse_and_split_message(message.text)
                     
+                    # Пропускаємо якщо немає валідних повідомлень
+                    if not split_messages or (len(split_messages) == 1 and not split_messages[0]):
+                        logger.info(f"⏭️ Пропущено повідомлення без конкретних локацій")
+                        last_message_ids[channel] = message.id
+                        continue
+                    
                     # Пересилаємо кожне окреме повідомлення
                     try:
                         for split_msg in split_messages:
+                            if not split_msg or not split_msg.strip():
+                                continue
+                                
                             if message.media:
                                 # Якщо є медіа, відправляємо тільки з першим повідомленням
                                 if split_msg == split_messages[0]:
