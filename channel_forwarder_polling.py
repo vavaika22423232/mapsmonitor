@@ -189,20 +189,38 @@ def parse_and_split_message(text):
     lines = text.strip().split('\n')
     current_region = None
     
-    for line in lines:
+    # Зберігаємо наступний рядок як опис загрози
+    lines_list = text.strip().split('\n')
+    threat_descriptions = {}
+    for i, line in enumerate(lines_list):
+        if i + 1 < len(lines_list):
+            next_line = lines_list[i + 1].strip()
+            if next_line and not re.match(r'^[💥🛸🛵⚠️❗️🔴👁️]', next_line):
+                threat_descriptions[i] = next_line
+    
+    for i, line in enumerate(lines):
         line = line.strip()
         if not line:
             continue
         
         # Формат 1: "💥 Марганець (Дніпропетровська обл.)" або "🛸 Чернігів (Чернігівська обл.)"
         # Готові повідомлення з містом та областю (може бути текст після області)
-        ready_match = re.match(r'^[💥🛸🛵⚠️❗️🔴\s]*(.+?)\s*\((.+?обл\.?)\)', line)
+        ready_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(.+?)\s*\((.+?обл\.?)\)', line)
         if ready_match:
             city = ready_match.group(1).strip()
+            # Видаляємо emoji з назви міста
+            city = re.sub(r'^[💥🛸🛵⚠️❗️🔴👁️\*\s]+', '', city).strip()
+            city = re.sub(r'[\*]+', '', city).strip()
             region = ready_match.group(2).strip()
             if not region.endswith('.'):
                 region = region + '.'
-            message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+            
+            # Шукаємо опис загрози в наступному рядку
+            threat = threat_descriptions.get(i, "Загроза застосування БПЛА.")
+            # Обрізаємо зайве
+            threat = threat.split('.')[0] + '.' if '.' in threat else threat
+            
+            message = f"{city} ({region}) {threat}"
             messages.append(message)
             continue
         
