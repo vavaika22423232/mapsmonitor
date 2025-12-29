@@ -224,6 +224,37 @@ def parse_and_split_message(text):
             messages.append(message)
             continue
         
+        # Формат 2: "⚠️2х БпЛА на Шостку (Сумщина)" - місто і скорочена область в дужках
+        short_region_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|шахед[іиів]*)\s+(?:на\s+)?(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
+        if short_region_match:
+            quantity = short_region_match.group(1) or ''
+            city = short_region_match.group(3).strip()
+            short_region = short_region_match.group(4).strip()
+            
+            # Конвертуємо скорочену назву області в повну
+            region = REGION_MAP.get(short_region, short_region + ' обл.')
+            
+            message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+            messages.append(message)
+            continue
+        
+        # Формат 3: "⚠️8х БпЛА повз Кривий ріг на Кіровоградщину" - місто і область в тексті
+        direction_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|шахед[іиів]*)\s+(?:повз|на|курсом на)\s+(.+?)\s+(?:на|в|до)\s+(.+?)$', line, re.IGNORECASE)
+        if direction_match:
+            quantity = direction_match.group(1) or ''
+            city = direction_match.group(3).strip()
+            short_region = direction_match.group(4).strip()
+            
+            # Конвертуємо скорочену назву області в повну
+            region = REGION_MAP.get(short_region, None)
+            if not region and city in CITY_TO_REGION:
+                region = CITY_TO_REGION[city]
+            
+            if region:
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+            continue
+        
         # Перевіряємо чи це регіон
         is_region = False
         for region_key in REGION_MAP.keys():
