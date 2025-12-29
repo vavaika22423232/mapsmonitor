@@ -276,8 +276,30 @@ def parse_and_split_message(text):
     return messages
 
 
+async def ensure_connected():
+    """Перевірка та відновлення з'єднання"""
+    if not client.is_connected():
+        logger.info("🔄 Перепідключення до Telegram...")
+        try:
+            await client.connect()
+            if await client.is_user_authorized():
+                logger.info("✅ Перепідключено успішно")
+                return True
+            else:
+                logger.error("❌ Сесія не авторизована")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Помилка перепідключення: {e}")
+            return False
+    return True
+
+
 async def check_and_forward():
     """Перевірка нових повідомлень та пересилання"""
+    
+    # Перевіряємо з'єднання перед кожною перевіркою
+    if not await ensure_connected():
+        return
     forwarded_count = 0
     
     for channel in SOURCE_CHANNELS:
