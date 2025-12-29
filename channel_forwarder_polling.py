@@ -267,17 +267,29 @@ def parse_and_split_message(text):
             continue
         
         # Парсимо рядки з БпЛА/шахедами
-        if any(keyword in line.lower() for keyword in ['бпла', 'бпла', 'шахед', 'шахід']):
+        if any(keyword in line.lower() for keyword in ['бпла', 'шахед', 'шахід']):
             # Витягуємо кількість та текст
-            # Формати: "2 шахеди на Чернігів", "2х БпЛА курсом на Київ", "БпЛА на Харків"
+            # Формати: "2 шахеди на Чернігів", "2х БпЛА курсом на Київ", "БпЛА на Харків", "4 шахеди через Казанку в бік Кіровоградщини"
             
-            # Спроба 1: "число + шахед/шахедів/шахеди + на + місто"
+            # Спроба 1: "число + шахед/шахедів/шахеди + через + місто + в бік + область"
+            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+через\s+(.+?)\s+в\s+бік\s+(.+)$', line, re.IGNORECASE)
+            if match:
+                quantity = match.group(1) + 'х ' if match.group(1) else ''
+                city = match.group(3).strip()
+                short_region = match.group(4).strip()
+                region = REGION_MAP.get(short_region, current_region)
+                if region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
+            
+            # Спроба 2: "число + шахед/шахедів/шахеди + на + місто"
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)?\s*(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
             if not match:
-                # Спроба 2: "числох БпЛА на місто"
+                # Спроба 3: "числох БпЛА на місто"
                 match = re.match(r'(\d+)х?\s*(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
             if not match:
-                # Спроба 3: "БпЛА на місто" (без числа)
+                # Спроба 4: "БпЛА на місто" (без числа)
                 match = re.match(r'(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
                 if match:
                     quantity = ''
