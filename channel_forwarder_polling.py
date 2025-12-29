@@ -283,37 +283,65 @@ def parse_and_split_message(text):
                     messages.append(message)
                 continue
             
-            # Спроба 2: "число + шахед/шахедів/шахеди + на + місто"
-            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)?\s*(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
-            if not match:
-                # Спроба 3: "числох БпЛА на місто"
-                match = re.match(r'(\d+)х?\s*(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
-            if not match:
-                # Спроба 4: "БпЛА на місто" (без числа)
-                match = re.match(r'(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
-                if match:
-                    quantity = ''
-                    city = match.group(2).strip()
-                else:
-                    continue
-            else:
+            # Спроба 2: "число + шахед + з + область + на + місто" (1 шахед з Сумщини на Талалаївку)
+            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+з\s+\S+\s+на\s+(.+)$', line, re.IGNORECASE)
+            if match:
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
-                city = match.group(3).strip() if len(match.groups()) >= 3 else match.group(2).strip()
+                city = match.group(3).strip()
+                region = current_region
+                if not region and city in CITY_TO_REGION:
+                    region = CITY_TO_REGION[city]
+                if region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
             
-            # Очищаємо місто від зайвого
-            city = re.sub(r'\s*курсом.*$', '', city)
-            city = re.sub(r'\s*з\s+.*$', '', city)
-            city = city.strip()
+            # Спроба 3: "число + шахед/шахедів/шахеди + на + місто" (1 шахед на Березнегувате)
+            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
+            if match:
+                quantity = match.group(1) + 'х ' if match.group(1) else ''
+                city = match.group(3).strip()
+                # Видаляємо "с." на початку (с.Рівне -> Рівне)
+                city = re.sub(r'^с\.', '', city).strip()
+                region = current_region
+                if not region and city in CITY_TO_REGION:
+                    region = CITY_TO_REGION[city]
+                if region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
             
-            # Визначаємо регіон: спочатку з current_region, потім з CITY_TO_REGION
-            region = current_region
-            if not region and city in CITY_TO_REGION:
-                region = CITY_TO_REGION[city]
+            # Спроба 4: "числох БпЛА на місто"
+            match = re.match(r'(\d+)х?\s*(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
+            if match:
+                quantity = match.group(1) + 'х ' if match.group(1) else ''
+                city = match.group(3).strip()
+                city = re.sub(r'\s*курсом.*$', '', city)
+                city = re.sub(r'\s*з\s+.*$', '', city)
+                city = city.strip()
+                region = current_region
+                if not region and city in CITY_TO_REGION:
+                    region = CITY_TO_REGION[city]
+                if city and region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
             
-            # Відправляємо тільки якщо є і місто, і регіон
-            if city and region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
-                messages.append(message)
+            # Спроба 5: "БпЛА на місто" (без числа)
+            match = re.match(r'(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
+            if match:
+                quantity = ''
+                city = match.group(2).strip()
+                city = re.sub(r'\s*курсом.*$', '', city)
+                city = re.sub(r'\s*з\s+.*$', '', city)
+                city = city.strip()
+                region = current_region
+                if not region and city in CITY_TO_REGION:
+                    region = CITY_TO_REGION[city]
+                if city and region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
     
     # Повертаємо знайдені повідомлення
     return messages
