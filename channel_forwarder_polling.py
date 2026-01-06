@@ -283,7 +283,20 @@ def parse_and_split_message(text):
                     messages.append(message)
                 continue
             
-            # Спроба 2: "число + шахед + з + область + на + місто" (1 шахед з Сумщини на Талалаївку)
+            # Спроба 2: "число + шахед + кружляє біля/в районі + місто" (1 шахед кружляє біля Південноукраїнська)
+            match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+кружляє\s+(?:біля|в районі)\s+(.+)$', line, re.IGNORECASE)
+            if match:
+                quantity = match.group(1) + 'х ' if match.group(1) else ''
+                city = match.group(3).strip()
+                region = current_region
+                if not region and city in CITY_TO_REGION:
+                    region = CITY_TO_REGION[city]
+                if region:
+                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
+            
+            # Спроба 3: "число + шахед + з + область + на + місто" (1 шахед з Сумщини на Талалаївку)
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+з\s+\S+\s+на\s+(.+)$', line, re.IGNORECASE)
             if match:
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
@@ -296,7 +309,7 @@ def parse_and_split_message(text):
                     messages.append(message)
                 continue
             
-            # Спроба 3: "число + шахед/шахедів/шахеди + на + місто" (1 шахед на Березнегувате)
+            # Спроба 4: "число + шахед/шахедів/шахеди + на + місто" (1 шахед на Березнегувате)
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
             if match:
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
