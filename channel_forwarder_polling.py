@@ -24,7 +24,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,UkraineMonitorZagroz').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Інтервал опитування (секунди)
@@ -151,13 +151,13 @@ def clean_text(text):
         if not line.strip() or line.strip() in ['ㅤ', '─' * len(line.strip())]:
             continue
         
-        # Пропускаємо рядки з "Підписатися", "ППОшник" тощо
-        skip_keywords = ['Підписатися', 'ППОшник', 'Підпис', 'Telegram', 'Channel']
+        # Пропускаємо рядки з "Підписатися", "ППОшник", "Monitorzagroz" тощо
+        skip_keywords = ['Підписатися', 'ППОшник', 'Підпис', 'Telegram', 'Channel', 'Monitorzagroz']
         if any(keyword in line for keyword in skip_keywords):
             continue
         
-        # Пропускаємо рядки що містять тільки стрілки та символи
-        if re.match(r'^[➡️⬅️↗️↘️↖️↙️⬆️⬇️\s]+$', line):
+        # Пропускаємо рядки що містять тільки стрілки, флаги та символи
+        if re.match(r'^[➡️⬅️↗️↘️↖️↙️⬆️⬇️🇺🇦\s|]+$', line):
             continue
         
         # Видаляємо посилання (URLs)
@@ -224,7 +224,21 @@ def parse_and_split_message(text):
             messages.append(message)
             continue
         
-        # Формат 2: "⚠️2х БпЛА на Шостку (Сумщина)" - місто і скорочена область в дужках
+        # Формат 2: "🛸 Шахед курсом на Південноукраїнськ (Миколаївщина)" - з курсом
+        course_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|[Шш]ахед[іиів]*)\s+курсом\s+на\s+(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
+        if course_match:
+            quantity = course_match.group(1) or ''
+            city = course_match.group(3).strip()
+            short_region = course_match.group(4).strip()
+            
+            # Конвертуємо скорочену назву області в повну
+            region = REGION_MAP.get(short_region, short_region + ' обл.')
+            
+            message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+            messages.append(message)
+            continue
+        
+        # Формат 3: "⚠️2х БпЛА на Шостку (Сумщина)" - місто і скорочена область в дужках
         short_region_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|шахед[іиів]*)\s+(?:на\s+)?(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
         if short_region_match:
             quantity = short_region_match.group(1) or ''
