@@ -8,6 +8,7 @@ Channel Forwarder з polling (опитування)
 import asyncio
 import logging
 import re
+import aiohttp
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
@@ -24,7 +25,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,UkraineMonitorZagroz').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,UkraineMonitorZagroz,radarzagrozi,povitryanatrivogaaa').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Інтервал опитування (секунди)
@@ -133,7 +134,79 @@ CITY_TO_REGION = {
     'Сміла': 'Черкаська обл.',
     'Коростень': 'Житомирська обл.',
     'Бердичів': 'Житомирська обл.',
+    # Харківська область
+    'Богодухів': 'Харківська обл.',
+    'Чугуїв': 'Харківська обл.',
+    'Нова Водолага': 'Харківська обл.',
+    'Слобожанське': 'Харківська обл.',
+    'Краснопавлівка': 'Харківська обл.',
+    'Барвінкове': 'Харківська обл.',
+    # Дніпропетровська область
+    'Синельникове': 'Дніпропетровська обл.',
+    # Миколаївська область
+    'Зеленодольськ': 'Миколаївська обл.',
+    # Дніпропетровська область
+    'П\'ятихатки': 'Дніпропетровська обл.',
+    'Пʼятихатки': 'Дніпропетровська обл.',
+    # Запорізька область
+    'Комишуваха': 'Запорізька обл.',
 }
+
+# Кеш для геокодингу (щоб не робити зайвих запитів)
+geo_cache = {}
+
+async def get_region_by_city(city_name):
+    """
+    Отримує область за назвою міста через Nominatim API (OpenStreetMap)
+    """
+    # Спочатку перевіряємо локальний словник
+    if city_name in CITY_TO_REGION:
+        return CITY_TO_REGION[city_name]
+    
+    # Перевіряємо кеш
+    if city_name in geo_cache:
+        return geo_cache[city_name]
+    
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': f"{city_name}, Україна",
+            'format': 'json',
+            'addressdetails': 1,
+            'limit': 1,
+            'accept-language': 'uk'
+        }
+        headers = {
+            'User-Agent': 'TelegramForwarder/1.0'
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, headers=headers, timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data and len(data) > 0:
+                        address = data[0].get('address', {})
+                        # Шукаємо область
+                        region = address.get('state', '')
+                        if region:
+                            # Приводимо до формату "Область обл."
+                            if 'область' in region.lower():
+                                region = region.replace('область', 'обл.').replace('Область', 'обл.')
+                            elif not region.endswith('обл.'):
+                                region = region + ' обл.'
+                            
+                            # Зберігаємо в кеш
+                            geo_cache[city_name] = region
+                            logger.info(f"🌍 Геокодинг: {city_name} -> {region}")
+                            return region
+    except asyncio.TimeoutError:
+        logger.warning(f"⚠️ Таймаут геокодингу для {city_name}")
+    except Exception as e:
+        logger.warning(f"⚠️ Помилка геокодингу для {city_name}: {e}")
+    
+    # Зберігаємо None в кеш щоб не повторювати запити
+    geo_cache[city_name] = None
+    return None
 
 
 def clean_text(text):
@@ -152,7 +225,7 @@ def clean_text(text):
             continue
         
         # Пропускаємо рядки з "Підписатися", "ППОшник", "Monitorzagroz" тощо
-        skip_keywords = ['Підписатися', 'ППОшник', 'Підпис', 'Telegram', 'Channel', 'Monitorzagroz']
+        skip_keywords = ['Підписатися', 'ППОшник', 'Підпис', 'Telegram', 'Channel', 'Моніторинг 24/7', 'Напрямок ракет', 'Підтримати канал', 'Радар України']
         if any(keyword in line for keyword in skip_keywords):
             continue
         
@@ -175,7 +248,7 @@ def clean_text(text):
     return '\n'.join(cleaned_lines)
 
 
-def parse_and_split_message(text):
+async def parse_and_split_message(text):
     """
     Розбиває повідомлення на окремі повідомлення по населених пунктах
     """
@@ -224,12 +297,12 @@ def parse_and_split_message(text):
             messages.append(message)
             continue
         
-        # Формат 2: "🛸 Шахед курсом на Південноукраїнськ (Миколаївщина)" - з курсом
-        course_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|[Шш]ахед[іиів]*)\s+курсом\s+на\s+(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
+        # Формат 2: "🛸 Шахед курсом на Південноукраїнськ (Миколаївщина)" або "🛸 3 Шахеда курсом на Запоріжжя (Дніпропетровщина)"
+        course_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*)\s*[Шш]ахед[іиіва]*\s+курсом\s+на\s+(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
         if course_match:
-            quantity = course_match.group(1) or ''
-            city = course_match.group(3).strip()
-            short_region = course_match.group(4).strip()
+            quantity = course_match.group(1) + 'х ' if course_match.group(1) else ''
+            city = course_match.group(2).strip()
+            short_region = course_match.group(3).strip()
             
             # Конвертуємо скорочену назву області в повну
             region = REGION_MAP.get(short_region, short_region + ' обл.')
@@ -269,15 +342,72 @@ def parse_and_split_message(text):
                 messages.append(message)
             continue
         
-        # Перевіряємо чи це регіон
+        # Формат: 🛵5х Шахедів на Кривий Ріг! або 🛵Вже 5х Шахедів на місто!
+        shahedy_na_match = re.match(r'^[🛵🛸💥⚠️❗️\s]*(?:Вже\s+)?(\d+)х?\s*[Шш]ахед[іиіва]*\s+на\s+(.+?)!?$', line, re.IGNORECASE)
+        if shahedy_na_match:
+            quantity = shahedy_na_match.group(1) + 'х ' if shahedy_na_match.group(1) else ''
+            city = shahedy_na_match.group(2).strip().rstrip('!')
+            region = current_region
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+            continue
+        
+        # Перевіряємо чи це регіон (📡Харківщина: або просто Харківщина: або Дніпропетровщина:)
         is_region = False
-        for region_key in REGION_MAP.keys():
-            if region_key in line and ':' in line:
-                current_region = REGION_MAP[region_key]
+        region_header_match = re.match(r'^[📡⚠️🔴\s]*([^:]+):', line)
+        if region_header_match:
+            potential_region = region_header_match.group(1).strip()
+            for region_key in REGION_MAP.keys():
+                if region_key in potential_region:
+                    current_region = REGION_MAP[region_key]
+                    is_region = True
+                    break
+            # Спеціальний випадок для "Запорізька область"
+            if 'Запорізьк' in potential_region:
+                current_region = 'Запорізька обл.'
                 is_region = True
-                break
         
         if is_region:
+            continue
+        
+        # Формат: ⚠️БпЛА курсом на Харків або ⚠️2х БпЛА курсом на Кривий Ріг або БпЛА курсом на Пʼятихатки
+        bpla_kursom_match = re.match(r'^[⚠️❗️🔴\s]*(\d*х?\s*)?(БпЛА|БПЛА)\s+курсом\s+на\s+(.+?)\s*$', line, re.IGNORECASE)
+        if bpla_kursom_match:
+            quantity = bpla_kursom_match.group(1) or ''
+            quantity = quantity.strip()
+            if quantity and not quantity.endswith('х'):
+                quantity = quantity + 'х'
+            if quantity:
+                quantity = quantity + ' '
+            city = bpla_kursom_match.group(3).strip()
+            # Використовуємо current_region або геокодинг
+            region = current_region
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+            continue
+        
+        # Формат: 3х БпЛА маневрують південніше Зеленодольська
+        manevruyut_match = re.match(r'^[⚠️❗️🔴\s]*(\d*х?\s*)?(БпЛА|БПЛА)\s+маневрують\s+(?:південніше|північніше|західніше|східніше|біля|в районі)\s+(.+?)\s*$', line, re.IGNORECASE)
+        if manevruyut_match:
+            quantity = manevruyut_match.group(1) or ''
+            quantity = quantity.strip()
+            if quantity and not quantity.endswith('х'):
+                quantity = quantity + 'х'
+            if quantity:
+                quantity = quantity + ' '
+            city = manevruyut_match.group(3).strip()
+            region = current_region
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
             continue
         
         # Парсимо рядки з БпЛА/шахедами
@@ -303,8 +433,8 @@ def parse_and_split_message(text):
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = match.group(3).strip()
                 region = current_region
-                if not region and city in CITY_TO_REGION:
-                    region = CITY_TO_REGION[city]
+                if not region:
+                    region = await get_region_by_city(city)
                 if region:
                     message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
                     messages.append(message)
@@ -316,8 +446,8 @@ def parse_and_split_message(text):
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = match.group(3).strip()
                 region = current_region
-                if not region and city in CITY_TO_REGION:
-                    region = CITY_TO_REGION[city]
+                if not region:
+                    region = await get_region_by_city(city)
                 if region:
                     message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
                     messages.append(message)
@@ -331,8 +461,8 @@ def parse_and_split_message(text):
                 # Видаляємо "с." на початку (с.Рівне -> Рівне)
                 city = re.sub(r'^с\.', '', city).strip()
                 region = current_region
-                if not region and city in CITY_TO_REGION:
-                    region = CITY_TO_REGION[city]
+                if not region:
+                    region = await get_region_by_city(city)
                 if region:
                     message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
                     messages.append(message)
@@ -347,8 +477,8 @@ def parse_and_split_message(text):
                 city = re.sub(r'\s*з\s+.*$', '', city)
                 city = city.strip()
                 region = current_region
-                if not region and city in CITY_TO_REGION:
-                    region = CITY_TO_REGION[city]
+                if not region:
+                    region = await get_region_by_city(city)
                 if city and region:
                     message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
                     messages.append(message)
@@ -363,8 +493,8 @@ def parse_and_split_message(text):
                 city = re.sub(r'\s*з\s+.*$', '', city)
                 city = city.strip()
                 region = current_region
-                if not region and city in CITY_TO_REGION:
-                    region = CITY_TO_REGION[city]
+                if not region:
+                    region = await get_region_by_city(city)
                 if city and region:
                     message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
                     messages.append(message)
@@ -422,7 +552,7 @@ async def check_and_forward():
                     logger.info(f"🆕 Нове повідомлення в @{channel}: ID {message.id}")
                     
                     # Розбиваємо повідомлення на окремі
-                    split_messages = parse_and_split_message(message.text)
+                    split_messages = await parse_and_split_message(message.text)
                     
                     # Пропускаємо якщо немає валідних повідомлень
                     if not split_messages or (len(split_messages) == 1 and not split_messages[0]):
