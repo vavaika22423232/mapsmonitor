@@ -248,6 +248,39 @@ def clean_text(text):
     return '\n'.join(cleaned_lines)
 
 
+async def split_cities(city_string):
+    """
+    Розділяє рядок з кількома містами (через / або ,) на список окремих міст
+    Повертає перше місто (вибираємо одне)
+    """
+    # Видаляємо "з області" частину (напр. "Дубровицю з Житомирщини" -> "Дубровицю")
+    city_string = re.sub(r'\s+з\s+\S+$', '', city_string)
+    
+    # Розділяємо по / або ,
+    if '/' in city_string:
+        cities = city_string.split('/')
+        city = cities[0].strip()
+    elif ',' in city_string and 'обл' not in city_string.lower():
+        cities = city_string.split(',')
+        city = cities[0].strip()
+    else:
+        city = city_string.strip()
+    
+    # Видаляємо крапку та інші зайві символи в кінці назви міста
+    city = city.rstrip('.!?,;:')
+    
+    # Виправляємо відмінок (знахідний -> називний)
+    # Закінчення -у, -ю -> -а, -я для міст
+    if city.endswith('ицю'):
+        city = city[:-1] + 'я'  # Дубровицю -> Дубровиця
+    elif city.endswith('ку'):
+        city = city[:-1] + 'а'  # Шостку -> Шостка
+    elif city.endswith('ну'):
+        city = city[:-1] + 'а'  # Полтавщину -> не застосовується до міст
+    
+    return city
+
+
 async def parse_and_split_message(text):
     """
     Розбиває повідомлення на окремі повідомлення по населених пунктах
@@ -346,7 +379,7 @@ async def parse_and_split_message(text):
         shahedy_na_match = re.match(r'^[🛵🛸💥⚠️❗️\s]*(?:Вже\s+)?(\d+)х?\s*[Шш]ахед[іиіва]*\s+на\s+(.+?)!?$', line, re.IGNORECASE)
         if shahedy_na_match:
             quantity = shahedy_na_match.group(1) + 'х ' if shahedy_na_match.group(1) else ''
-            city = shahedy_na_match.group(2).strip().rstrip('!')
+            city = await split_cities(shahedy_na_match.group(2).strip().rstrip('!'))
             region = current_region
             if not region:
                 region = await get_region_by_city(city)
@@ -382,7 +415,7 @@ async def parse_and_split_message(text):
                 quantity = quantity + 'х'
             if quantity:
                 quantity = quantity + ' '
-            city = bpla_kursom_match.group(3).strip()
+            city = await split_cities(bpla_kursom_match.group(3).strip())
             # Використовуємо current_region або геокодинг
             region = current_region
             if not region:
@@ -401,7 +434,7 @@ async def parse_and_split_message(text):
                 quantity = quantity + 'х'
             if quantity:
                 quantity = quantity + ' '
-            city = manevruyut_match.group(3).strip()
+            city = await split_cities(manevruyut_match.group(3).strip())
             region = current_region
             if not region:
                 region = await get_region_by_city(city)
@@ -431,7 +464,7 @@ async def parse_and_split_message(text):
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+кружляє\s+(?:біля|в районі)\s+(.+)$', line, re.IGNORECASE)
             if match:
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
-                city = match.group(3).strip()
+                city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
@@ -444,7 +477,7 @@ async def parse_and_split_message(text):
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+з\s+\S+\s+на\s+(.+)$', line, re.IGNORECASE)
             if match:
                 quantity = match.group(1) + 'х ' if match.group(1) else ''
-                city = match.group(3).strip()
+                city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
@@ -460,6 +493,7 @@ async def parse_and_split_message(text):
                 city = match.group(3).strip()
                 # Видаляємо "с." на початку (с.Рівне -> Рівне)
                 city = re.sub(r'^с\.', '', city).strip()
+                city = await split_cities(city)
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
@@ -475,7 +509,7 @@ async def parse_and_split_message(text):
                 city = match.group(3).strip()
                 city = re.sub(r'\s*курсом.*$', '', city)
                 city = re.sub(r'\s*з\s+.*$', '', city)
-                city = city.strip()
+                city = await split_cities(city.strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
@@ -491,7 +525,7 @@ async def parse_and_split_message(text):
                 city = match.group(2).strip()
                 city = re.sub(r'\s*курсом.*$', '', city)
                 city = re.sub(r'\s*з\s+.*$', '', city)
-                city = city.strip()
+                city = await split_cities(city.strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
