@@ -26,7 +26,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,UkraineMonitorZagroz,radarzagrozi,povitryanatrivogaaa').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Інтервал опитування (секунди)
@@ -865,15 +865,51 @@ async def parse_and_split_message(text):
             messages.append(message)
             continue
         
+        # Формат: "7х БпЛА в Покровському районі (Київська обл.)" - кількість + район + область
+        v_rayoni_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d+)\s*х?\s*(?:БпЛА|БПЛА)?\s*(?:в|у)\s+(.+?)\s+район[іу]?\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
+        if v_rayoni_match:
+            quantity = v_rayoni_match.group(1) + 'х '
+            rayon = v_rayoni_match.group(2).strip()
+            region = v_rayoni_match.group(3).strip()
+            # Capitalize
+            rayon = rayon[0].upper() + rayon[1:] if rayon else rayon
+            region = region[0].upper() + region[1:] if region else region
+            if not region.endswith('.'):
+                region = region + '.'
+            message = f"{quantity}БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+            messages.append(message)
+            continue
+        
+        # Формат: "БпЛА в Покровському районі (Київська обл.)" - без кількості
+        v_rayoni_no_qty_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(?:БпЛА|БПЛА)\s+(?:в|у)\s+(.+?)\s+район[іу]?\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
+        if v_rayoni_no_qty_match:
+            rayon = v_rayoni_no_qty_match.group(1).strip()
+            region = v_rayoni_no_qty_match.group(2).strip()
+            # Capitalize
+            rayon = rayon[0].upper() + rayon[1:] if rayon else rayon
+            region = region[0].upper() + region[1:] if region else region
+            if not region.endswith('.'):
+                region = region + '.'
+            message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+            messages.append(message)
+            continue
+        
         # Формат 1: "💥 Марганець (Дніпропетровська обл.)" або "🛸 Чернігів (Чернігівська обл.)"
         # Готові повідомлення з містом та областю (може бути текст після області)
         ready_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(.+?)\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
         if ready_match:
             city = ready_match.group(1).strip()
+            # Пропускаємо якщо це формат з районом (вже оброблено вище)
+            if re.search(r'район[іу]?\s*$', city, re.IGNORECASE):
+                continue
             # Видаляємо emoji з назви міста
             city = re.sub(r'^[💥🛸🛵⚠️❗️🔴👁️\*\s]+', '', city).strip()
             city = re.sub(r'[\*]+', '', city).strip()
             # Видаляємо "бпла" з назви міста
+            city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо кількість на початку (7х, 3х тощо)
+            city = re.sub(r'^\d+\s*х?\s*', '', city).strip()
+            # Видаляємо повторне "бпла" після кількості
             city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
             # Видаляємо "в районі", "по межі" тощо
             city = re.sub(r'^(\d*х?\s*)?(в районі|по межі|на межі|біля межі|в напрямку)\s+', '', city, flags=re.IGNORECASE).strip()
