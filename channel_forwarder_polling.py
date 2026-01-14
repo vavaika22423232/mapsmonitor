@@ -758,6 +758,13 @@ async def parse_and_split_message(text):
                 messages.append(message)
                 continue
         
+        # Формат: "🧨Загроза застосування балістичного озброєння" - балістична загроза
+        balistyka_match = re.search(r'загроза\s+(?:застосування\s+)?балістич', line, re.IGNORECASE)
+        if balistyka_match:
+            message = "Загроза балістики!"
+            messages.append(message)
+            continue
+        
         # Формат: "⚠️2х Шахеди на Запоріжжя!" - Шахеди/шахед на місто
         shahedy_na_match = re.match(r'^[⚠️❗️🔴\s]*(\d+)\s*х?\s*(?:Шахед[иі]?|шахед[иі]?)\s+на\s+(.+?)[!\.]*$', line, re.IGNORECASE)
         if shahedy_na_match:
