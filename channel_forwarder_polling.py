@@ -911,10 +911,10 @@ async def parse_and_split_message(text):
             city = re.sub(r'^\d+\s*х?\s*', '', city).strip()
             # Видаляємо повторне "бпла" після кількості
             city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
-            # Видаляємо "в районі", "по межі" тощо
-            city = re.sub(r'^(\d*х?\s*)?(в районі|по межі|на межі|біля межі|в напрямку)\s+', '', city, flags=re.IGNORECASE).strip()
-            # Видаляємо "з області" в кінці (напр. "овруч з київщини" -> "овруч")
-            city = re.sub(r'\s+з\s+\S+$', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо "в районі", "по межі", "у напрямку", "в напрямку" тощо на початку
+            city = re.sub(r'^(\d*х?\s*)?(в районі|по межі|на межі|біля межі|[уів]\s+напрямку|на)\s+', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо "з моря", "з області", "зі сходу" тощо в кінці
+            city = re.sub(r'\s+з[іи]?\s+\S+$', '', city, flags=re.IGNORECASE).strip()
             # Виправляємо відмінок
             city = fix_city_case(city)
             # Capitalize першу літеру міста
