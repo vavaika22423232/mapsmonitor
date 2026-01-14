@@ -758,6 +758,21 @@ async def parse_and_split_message(text):
                 messages.append(message)
                 continue
         
+        # Формат: "⚠️2х Шахеди на Запоріжжя!" - Шахеди/шахед на місто
+        shahedy_na_match = re.match(r'^[⚠️❗️🔴\s]*(\d+)\s*х?\s*(?:Шахед[иі]?|шахед[иі]?)\s+на\s+(.+?)[!\.]*$', line, re.IGNORECASE)
+        if shahedy_na_match:
+            quantity = shahedy_na_match.group(1) + 'х '
+            city = shahedy_na_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
         # Формат ПС: "🛵 БпЛА з Миколаївщини курсом на Одещину (вектор - Доброслав)"
         ps_z_oblasti_vektor_match = re.match(r'^[🛵🛸\s]*(?:Група\s+)?БпЛА\s+(?:з\s+\S+\s+)?курсом\s+на\s+(\S+)(?:\s+з.+?)?\s*\(вектор\s*[-–—]\s*(.+?)\)', line, re.IGNORECASE)
         if ps_z_oblasti_vektor_match:
