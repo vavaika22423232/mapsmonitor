@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 import aiohttp
+import time
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
@@ -31,6 +32,9 @@ TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 # Інтервал опитування (секунди)
 POLL_INTERVAL = int(os.getenv('POLL_INTERVAL', '30'))
 
+# Інтервал дедуплікації (секунди) - 5 хвилин
+DEDUP_INTERVAL = int(os.getenv('DEDUP_INTERVAL', '300'))
+
 # Перевірка обов'язкових змінних
 if not API_ID or not API_HASH:
     logger.error("❌ TELEGRAM_API_ID та TELEGRAM_API_HASH обов'язкові!")
@@ -49,8 +53,64 @@ except ValueError:
 # Словник для зберігання ID останніх переслані повідомлень
 last_message_ids = {}
 
+# Кеш для дедуплікації повідомлень (місто -> timestamp)
+sent_locations_cache = {}
+
 # Клієнт з StringSession для Render
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+
+
+def normalize_location(message):
+    """
+    Витягує ключ локації з повідомлення для дедуплікації.
+    Наприклад: "БПЛА Харків (Харківська обл.) Загроза..." -> "харків_харківська обл."
+    """
+    # Шукаємо паттерн "Місто (Область)"
+    match = re.search(r'(?:БПЛА\s+)?([^(]+)\s*\(([^)]+)\)', message)
+    if match:
+        city = match.group(1).strip().lower()
+        region = match.group(2).strip().lower()
+        # Видаляємо зайві слова
+        city = re.sub(r'^\d+х\s+', '', city)  # Видаляємо "3х " на початку
+        city = re.sub(r'^бпла\s+', '', city)  # Видаляємо "бпла " на початку
+        city = re.sub(r'\s+район$', '', city)  # Видаляємо " район" в кінці
+        return f"{city}_{region}"
+    return None
+
+
+def is_duplicate(message):
+    """
+    Перевіряє чи повідомлення є дублікатом (вже відправлялось за останні DEDUP_INTERVAL секунд)
+    """
+    location_key = normalize_location(message)
+    if not location_key:
+        return False
+    
+    current_time = time.time()
+    
+    # Очищаємо старі записи з кешу
+    keys_to_remove = [k for k, v in sent_locations_cache.items() if current_time - v > DEDUP_INTERVAL]
+    for k in keys_to_remove:
+        del sent_locations_cache[k]
+    
+    # Перевіряємо чи є в кеші
+    if location_key in sent_locations_cache:
+        time_diff = current_time - sent_locations_cache[location_key]
+        logger.info(f"⏭️ Пропуск дубліката: {location_key} (було {int(time_diff)} сек тому)")
+        return True
+    
+    return False
+
+
+def mark_as_sent(message):
+    """
+    Позначає повідомлення як відправлене
+    """
+    location_key = normalize_location(message)
+    if location_key:
+        sent_locations_cache[location_key] = time.time()
+        logger.info(f"📝 Збережено в кеш: {location_key}")
+
 
 # Мапінг регіонів на українську мову
 REGION_MAP = {
@@ -184,15 +244,41 @@ CITY_TO_REGION = {
     'Слобожанське': 'Харківська обл.',
     'Краснопавлівка': 'Харківська обл.',
     'Барвінкове': 'Харківська обл.',
+    'Балаклія': 'Харківська обл.',
+    'Андріївка': 'Харківська обл.',
+    'Печеніги': 'Харківська обл.',
+    'Великий Бурлук': 'Харківська обл.',
     # Дніпропетровська область
     'Синельникове': 'Дніпропетровська обл.',
+    'Славгород': 'Дніпропетровська обл.',
     # Миколаївська область
     'Зеленодольськ': 'Миколаївська обл.',
+    'Очаків': 'Миколаївська обл.',
+    'Снігурівка': 'Миколаївська обл.',
     # Дніпропетровська область
     'П\'ятихатки': 'Дніпропетровська обл.',
     'Пʼятихатки': 'Дніпропетровська обл.',
     # Запорізька область
     'Комишуваха': 'Запорізька обл.',
+    # Чернігівська область
+    'Ніжин': 'Чернігівська обл.',
+    'Борзна': 'Чернігівська обл.',
+    'Березна': 'Чернігівська обл.',
+    'Сновськ': 'Чернігівська обл.',
+    'Седнів': 'Чернігівська обл.',
+    'Носівка': 'Чернігівська обл.',
+    'Городня': 'Чернігівська обл.',
+    'Ріпки': 'Чернігівська обл.',
+    'Куликівка': 'Чернігівська обл.',
+    'Кіпті': 'Чернігівська обл.',
+    # Житомирська область
+    'Народичі': 'Житомирська обл.',
+    'Овруч': 'Житомирська обл.',
+    'Брусилів': 'Житомирська обл.',
+    # Донецька область
+    'Краматорськ': 'Донецька обл.',
+    # Одеська область
+    'Доброслав': 'Одеська обл.',
 }
 
 # Кеш для геокодингу (щоб не робити зайвих запитів)
@@ -387,6 +473,29 @@ def fix_city_case(city):
         "П'ятихаток": "П'ятихатки",
         'Пʼятихаток': 'Пʼятихатки',
         'Брусилова': 'Брусилів',
+        # Нові міста
+        'Славгорода': 'Славгород',
+        'Народичів': 'Народичі',
+        'Березни': 'Березна',
+        'Борзни': 'Борзна',
+        'Сновська': 'Сновськ',
+        'Седнева': 'Седнів',
+        'Носівки': 'Носівка',
+        'Городні': 'Городня',
+        'Ріпок': 'Ріпки',
+        'Куликівки': 'Куликівка',
+        'Кіптів': 'Кіпті',
+        'Самара': 'Самар',
+        'Краматорська': 'Краматорськ',
+        'Балаклії': 'Балаклія',
+        'Андріївки': 'Андріївка',
+        'Чугуєва': 'Чугуїв',
+        'Печеніг': 'Печеніги',
+        'Очакова': 'Очаків',
+        'Снігурівки': 'Снігурівка',
+        'Доброслава': 'Доброслав',
+        # Кривий Ріг у родовому
+        'Кривого Рогу': 'Кривий Ріг',
         # Знахідний відмінок
         'Дубровицю': 'Дубровиця',
         'Шостку': 'Шостка',
@@ -402,6 +511,9 @@ def fix_city_case(city):
         return known_forms[city]
     
     # Автоматичне виправлення загальних патернів
+    # -ого -> прибираємо (Синельникового -> Синельникове)
+    if city.endswith('ого') and len(city) > 4:
+        return city[:-3] + 'е'
     # -ки -> -ка (родовий жіночого роду)
     if city.endswith('ки') and len(city) > 3:
         return city[:-1] + 'а'
@@ -423,6 +535,9 @@ def fix_city_case(city):
     # -лу -> -ла (знахідний)
     if city.endswith('лу') and len(city) > 3:
         return city[:-1] + 'а'
+    # -да -> -д (родовий: Славгорода -> Славгород)
+    if city.endswith('да') and len(city) > 3:
+        return city[:-1]
     
     return city
 
@@ -454,6 +569,224 @@ async def parse_and_split_message(text):
         line = line.strip()
         if not line:
             continue
+        
+        # Формат ПС: "🛵 Чернігівщина: БпЛА в напрямку н.п. Березна, Ніжин, Борзна."
+        # Область: БпЛА в напрямку н.п. Місто1, Місто2
+        ps_region_np_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        if ps_region_np_match:
+            short_region = ps_region_np_match.group(1).strip()
+            cities_str = ps_region_np_match.group(2).strip()
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                # Розділяємо міста по , та /
+                cities_str = cities_str.replace('/', ',')
+                cities = [c.strip().rstrip('.') for c in cities_str.split(',') if c.strip()]
+                for city in cities:
+                    city = fix_city_case(city)
+                    city = city[0].upper() + city[1:] if city else city
+                    message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 Житомирщина: БпЛА курсом на Коростень зі сходу."
+        ps_region_kursom_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+курсом\s+на\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        if ps_region_kursom_match:
+            short_region = ps_region_kursom_match.group(1).strip()
+            city = ps_region_kursom_match.group(2).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА на сході Дніпропетровщини повз Шахтарське курсом на захід."
+        ps_na_storoni_povz_match = re.match(r'^[🛵🛸\s]*БпЛА\s+на\s+(?:сході|заході|півночі|півдні)\s+(\S+)\s+повз\s+(\S+)\s+курсом.*$', line, re.IGNORECASE)
+        if ps_na_storoni_povz_match:
+            short_region = ps_na_storoni_povz_match.group(1).strip()
+            city = ps_na_storoni_povz_match.group(2).strip().rstrip('.,;')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА курсом на/повз Миколаїв з південного заходу."
+        ps_kursom_na_match = re.match(r'^[🛵🛸\s]*БпЛА\s+курсом\s+(?:на/повз|на|повз)\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        if ps_kursom_na_match:
+            city = ps_kursom_na_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА з півночі курсом на Харків."
+        ps_z_kursom_match = re.match(r'^[🛵🛸\s]*БпЛА\s+з\s+\S+\s+курсом\s+на\s+(.+?)\.?$', line, re.IGNORECASE)
+        if ps_z_kursom_match:
+            city = ps_z_kursom_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА на Донеччині курсом на Харківщину (Лозівський район)."
+        ps_na_oblast_rayon_match = re.match(r'^[🛵🛸\s]*БпЛА\s+на\s+\S+\s+курсом\s+на\s+(\S+)\s*\((.+?)\s*район\)', line, re.IGNORECASE)
+        if ps_na_oblast_rayon_match:
+            short_region = ps_na_oblast_rayon_match.group(1).strip()
+            rayon = ps_na_oblast_rayon_match.group(2).strip()
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА на півночі Чернігівщини курсом на Сновськ."
+        ps_na_pivnochi_match = re.match(r'^[🛵🛸\s]*БпЛА\s+на\s+(?:півночі|півдні|заході|сході)\s+(\S+)\s+курсом\s+на\s+(.+?)\.?$', line, re.IGNORECASE)
+        if ps_na_pivnochi_match:
+            short_region = ps_na_pivnochi_match.group(1).strip()
+            city = ps_na_pivnochi_match.group(2).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА повз Седнів курсом на Чернігів."
+        ps_povz_kursom_match = re.match(r'^[🛵🛸\s]*БпЛА\s+повз\s+\S+\s+курсом\s+на\s+(.+?)\.?$', line, re.IGNORECASE)
+        if ps_povz_kursom_match:
+            city = ps_povz_kursom_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵Харківщина: БпЛА повз Ізюм на сході південно-західним курсом."
+        ps_region_povz_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+повз\s+(\S+).*$', line, re.IGNORECASE)
+        if ps_region_povz_match:
+            short_region = ps_region_povz_match.group(1).strip()
+            city = ps_region_povz_match.group(2).strip().rstrip('.,;')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 Дніпропетровщина: БпЛА на півночі Павлограда, курс - західний"
+        ps_region_na_pivnochi_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+на\s+(?:півночі|півдні|заході|сході)\s+(\S+?)(?:,|\s+курс).*$', line, re.IGNORECASE)
+        if ps_region_na_pivnochi_match:
+            short_region = ps_region_na_pivnochi_match.group(1).strip()
+            city = ps_region_na_pivnochi_match.group(2).strip().rstrip('.,;')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА на/повз Очаків на Миколаївщину"
+        ps_na_povz_na_oblast_match = re.match(r'^[🛵🛸\s]*БпЛА\s+(?:на/повз|на|повз)\s+(\S+)\s+на\s+(\S+)(?:\s+з.+)?\.?$', line, re.IGNORECASE)
+        if ps_na_povz_na_oblast_match:
+            city = ps_na_povz_na_oblast_match.group(1).strip().rstrip('.,;')
+            short_region = ps_na_povz_na_oblast_match.group(2).strip()
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА на Харківщині в напрямку н.п.Великий Бурлук" або "🛵 БпЛА на Миколаївщині в напрямку Снігурівки"
+        ps_na_oblasti_v_napryamku_match = re.match(r'^[🛵🛸\s]*БпЛА\s+на\s+(\S+)\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        if ps_na_oblasti_v_napryamku_match:
+            short_region = ps_na_oblasti_v_napryamku_match.group(1).strip()
+            city = ps_na_oblasti_v_napryamku_match.group(2).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 БпЛА з Миколаївщини курсом на Одещину (вектор - Доброслав)"
+        ps_z_oblasti_vektor_match = re.match(r'^[🛵🛸\s]*(?:Група\s+)?БпЛА\s+(?:з\s+\S+\s+)?курсом\s+на\s+(\S+)(?:\s+з.+?)?\s*\(вектор\s*[-–—]\s*(.+?)\)', line, re.IGNORECASE)
+        if ps_z_oblasti_vektor_match:
+            short_region = ps_z_oblasti_vektor_match.group(1).strip()
+            city = ps_z_oblasti_vektor_match.group(2).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵БпЛА на Нікопольський р-н Дніпропетровщини"
+        ps_na_rayon_oblasti_match = re.match(r'^[🛵🛸\s]*БпЛА\s+на\s+(\S+)\s+р-н\s+(\S+)(?:\s+з.+)?\.?$', line, re.IGNORECASE)
+        if ps_na_rayon_oblasti_match:
+            rayon = ps_na_rayon_oblasti_match.group(1).strip()
+            short_region = ps_na_rayon_oblasti_match.group(2).strip()
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                # Виправляємо відмінок району (Нікопольський -> Нікопольський)
+                message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵 Дніпропетровщина: БпЛА в напрямку Зеленодольська та Кривого Рогу"
+        ps_region_ta_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(.+?)\s+та\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        if ps_region_ta_match:
+            short_region = ps_region_ta_match.group(1).strip()
+            city1 = ps_region_ta_match.group(2).strip().rstrip('.,;')
+            city2 = ps_region_ta_match.group(3).strip().rstrip('.,;')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                for city in [city1, city2]:
+                    city = fix_city_case(city)
+                    city = city[0].upper() + city[1:] if city else city
+                    message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    messages.append(message)
+                continue
+        
+        # Формат ПС: "🛵Змінив курс на Ріпки." - використовуємо current_region
+        ps_zminiv_kurs_match = re.match(r'^[🛵🛸\s]*Змінив\s+курс\s+на\s+(.+?)\.?$', line, re.IGNORECASE)
+        if ps_zminiv_kurs_match:
+            city = ps_zminiv_kurs_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
         
         # Формат 0: "бпла місто по межі (область) загроза..." - з "по межі" або подібними фразами
         # Наприклад: "бпла брусилів по межі (житомирська обл.) загроза застосування бпла."
@@ -911,8 +1244,13 @@ async def check_and_forward():
                     
                     # Пересилаємо кожне окреме повідомлення
                     try:
+                        sent_count = 0
                         for split_msg in split_messages:
                             if not split_msg or not split_msg.strip():
+                                continue
+                            
+                            # Перевіряємо на дублікат
+                            if is_duplicate(split_msg):
                                 continue
                                 
                             if message.media:
@@ -933,13 +1271,19 @@ async def check_and_forward():
                                     TARGET_CHANNEL,
                                     split_msg
                                 )
+                            
+                            # Позначаємо як відправлене
+                            mark_as_sent(split_msg)
+                            sent_count += 1
+                            
                             # Невелика затримка між повідомленнями
                             await asyncio.sleep(0.5)
                         
                         # Оновлюємо ID
                         last_message_ids[channel] = message.id
-                        forwarded_count += 1
-                        logger.info(f"✅ Переслано з @{channel} в @{TARGET_CHANNEL}")
+                        if sent_count > 0:
+                            forwarded_count += 1
+                            logger.info(f"✅ Переслано {sent_count} повідомлень з @{channel} в @{TARGET_CHANNEL}")
                         
                     except Exception as e:
                         logger.error(f"❌ Помилка пересилання з @{channel}: {e}")
