@@ -484,7 +484,8 @@ async def parse_and_split_message(text):
         
         # Формат 0.5: "БПЛА з Області курсом на Область (Район район обл.)" 
         # Наприклад: "БПЛА з Чернігівщини курсом на Київщину (Вишгородський район обл.)"
-        z_oblasti_rayon_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(бпла|БпЛА|БПЛА)\s+з\s+\S+\s+курсом\s+на\s+(\S+)\s*\((.+?)\s+район\s*обл\.?\)', line, re.IGNORECASE)
+        # Або: "БПЛА Донеччині курсом на Харківщину (Лозівський район обл.)"
+        z_oblasti_rayon_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(бпла|БпЛА|БПЛА)\s+(?:з\s+)?\S+\s+курсом\s+на\s+(\S+)\s*\((.+?)\s+район\s*обл\.?\)', line, re.IGNORECASE)
         if z_oblasti_rayon_match:
             quantity = z_oblasti_rayon_match.group(1) or ''
             quantity = quantity.strip()
