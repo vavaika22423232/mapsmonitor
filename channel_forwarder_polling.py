@@ -773,10 +773,13 @@ async def parse_and_split_message(text):
             continue
         
         # Формат: "💣 Краматорський район (Донецька обл.)" - КАБи по району
-        kab_rayon_match = re.match(r'^[💣\s]*(.+?)\s+район\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
+        kab_rayon_match = re.match(r'^[💣🟢🔴⚠️❗️\s\*]*(.+?)\s+район\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
         if kab_rayon_match:
             rayon = kab_rayon_match.group(1).strip()
             region = kab_rayon_match.group(2).strip()
+            # Видаляємо залишкові emoji та зірочки з назви району
+            rayon = re.sub(r'^[\*🟢🔴⚠️❗️💣\s]+', '', rayon).strip()
+            rayon = re.sub(r'[\*]+', '', rayon).strip()
             rayon = rayon[0].upper() + rayon[1:] if rayon else rayon
             region = region[0].upper() + region[1:] if region else region
             if not region.endswith('.'):
