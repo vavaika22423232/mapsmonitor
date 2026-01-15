@@ -772,6 +772,19 @@ async def parse_and_split_message(text):
             messages.append(message)
             continue
         
+        # Формат: "💣 Краматорський район (Донецька обл.)" - КАБи по району
+        kab_rayon_match = re.match(r'^[💣\s]*(.+?)\s+район\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
+        if kab_rayon_match:
+            rayon = kab_rayon_match.group(1).strip()
+            region = kab_rayon_match.group(2).strip()
+            rayon = rayon[0].upper() + rayon[1:] if rayon else rayon
+            region = region[0].upper() + region[1:] if region else region
+            if not region.endswith('.'):
+                region = region + '.'
+            message = f"КАБ {rayon} район ({region}) Загроза застосування КАБів."
+            messages.append(message)
+            continue
+        
         # Формат: "⚠️2х Шахеди на Запоріжжя!" - Шахеди/шахед на місто
         shahedy_na_match = re.match(r'^[⚠️❗️🔴\s]*(\d+)\s*х?\s*(?:Шахед[иі]?|шахед[иі]?)\s+на\s+(.+?)[!\.]*$', line, re.IGNORECASE)
         if shahedy_na_match:
