@@ -618,6 +618,20 @@ async def parse_and_split_message(text):
                     messages.append(message)
                 continue
         
+        # Формат ПС: "Житомирщина: 1 БпЛА в районі Малина"
+        ps_region_v_rayoni_match = re.match(r'^[🛵🛸\s]*(\S+):\s*(\d+)\s*(?:БпЛА|БПЛА)\s+в\s+район[іу]\s+(.+?)\.?$', line, re.IGNORECASE)
+        if ps_region_v_rayoni_match:
+            short_region = ps_region_v_rayoni_match.group(1).strip()
+            quantity = ps_region_v_rayoni_match.group(2) + 'х '
+            city = ps_region_v_rayoni_match.group(3).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                messages.append(message)
+                continue
+        
         # Формат ПС: "🛵 Житомирщина: БпЛА курсом на Коростень зі сходу."
         ps_region_kursom_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+курсом\s+на\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
         if ps_region_kursom_match:
