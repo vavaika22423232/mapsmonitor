@@ -14,6 +14,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
 import sys
+from groq import Groq
 
 logging.basicConfig(
     format='[%(levelname)s/%(asctime)s] %(message)s',
@@ -28,6 +29,19 @@ STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
 SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
+
+# Groq API конфігурація (ключ ОБОВ'ЯЗКОВО через env змінну GROQ_API_KEY)
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+
+# Ініціалізація Groq клієнта
+groq_client = None
+if GROQ_API_KEY:
+    try:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+        logger.info("✅ Groq клієнт ініціалізовано")
+    except Exception as e:
+        logger.warning(f"⚠️ Не вдалося ініціалізувати Groq: {e}")
 
 # Спеціальний канал для Харківщини (окремий парсер)
 KHARKIV_CHANNEL = 'monitor1654'
@@ -61,6 +75,73 @@ sent_locations_cache = {}
 
 # Клієнт з StringSession для Render
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+
+
+async def parse_with_groq(text):
+    """
+    Використовує Groq LLM для парсингу складних повідомлень про загрози.
+    Повертає список структурованих повідомлень.
+    """
+    if not groq_client or not text:
+        return []
+    
+    try:
+        prompt = f"""Проаналізуй це повідомлення про повітряну загрозу в Україні та витягни інформацію про БПЛА/ракети.
+Для кожної загрози вкажи:
+1. Тип (БПЛА, КАБ, ракета, балістика)
+2. Кількість (якщо вказано)
+3. Місто/населений пункт
+4. Область
+
+Повідомлення:
+{text}
+
+Відповідь у форматі JSON масиву:
+[{{"type": "БПЛА", "quantity": "2х", "city": "Харків", "region": "Харківська обл."}}]
+
+Якщо немає конкретної інформації про загрози, поверни порожній масив []."""
+
+        response = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": "Ти експерт з аналізу повідомлень про повітряні загрози в Україні. Відповідай тільки валідним JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=1000
+        )
+        
+        result_text = response.choices[0].message.content.strip()
+        
+        # Витягуємо JSON з відповіді
+        import json
+        # Шукаємо JSON масив в тексті
+        json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
+        if json_match:
+            threats = json.loads(json_match.group())
+            messages = []
+            for threat in threats:
+                threat_type = threat.get('type', 'БПЛА')
+                quantity = threat.get('quantity', '')
+                city = threat.get('city', '')
+                region = threat.get('region', '')
+                
+                if city and region:
+                    if quantity:
+                        msg = f"{quantity} {threat_type} {city} ({region}) Загроза застосування {threat_type}."
+                    else:
+                        msg = f"{threat_type} {city} ({region}) Загроза застосування {threat_type}."
+                    messages.append(msg)
+            
+            if messages:
+                logger.info(f"🤖 Groq розпізнав {len(messages)} загроз")
+            return messages
+        
+        return []
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Помилка Groq парсингу: {e}")
+        return []
 
 
 def normalize_location(message):
@@ -1749,6 +1830,15 @@ async def parse_and_split_message(text):
                     messages.append(message)
                 continue
     
+    # Якщо звичайний парсер не знайшов нічого і є Groq - пробуємо AI парсинг
+    if not messages and groq_client and text and len(text) > 20:
+        # Перевіряємо чи текст містить ключові слова про загрози
+        if any(kw in text.lower() for kw in ['бпла', 'шахед', 'ракет', 'каб', 'дрон', 'загроз', 'курсом', 'напрямку']):
+            logger.info("🤖 Пробуємо Groq для складного повідомлення...")
+            groq_messages = await parse_with_groq(text)
+            if groq_messages:
+                messages.extend(groq_messages)
+    
     # Повертаємо знайдені повідомлення
     return messages
 
@@ -1799,6 +1889,30 @@ async def check_and_forward():
                 if message.id > last_message_ids[channel]:
                     # Нове повідомлення!
                     logger.info(f"🆕 Нове повідомлення в @{channel}: ID {message.id}")
+                    
+                    # Канал @kpszsu - пересилаємо ВСІ повідомлення без фільтрації
+                    if channel.lower() == 'kpszsu':
+                        try:
+                            if message.text:
+                                if message.media:
+                                    await client.send_message(
+                                        TARGET_CHANNEL,
+                                        message.text,
+                                        file=message.media
+                                    )
+                                else:
+                                    await client.send_message(
+                                        TARGET_CHANNEL,
+                                        message.text
+                                    )
+                                logger.info(f"✅ [@kpszsu] Переслано без фільтрації: {message.text[:50]}...")
+                                forwarded_count += 1
+                            last_message_ids[channel] = message.id
+                            continue
+                        except Exception as e:
+                            logger.error(f"❌ Помилка пересилання з @kpszsu: {e}")
+                            last_message_ids[channel] = message.id
+                            continue
                     
                     # Розбиваємо повідомлення на окремі
                     split_messages = await parse_and_split_message(message.text)
