@@ -418,7 +418,7 @@ async def parse_kharkiv_message(text):
             else:
                 city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -431,7 +431,7 @@ async def parse_kharkiv_message(text):
             else:
                 city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -447,12 +447,12 @@ async def parse_kharkiv_message(text):
                 for c in cities:
                     c = fix_kharkiv_city_case(c)
                     c = c[0].upper() + c[1:] if c else c
-                    message = f"БПЛА {c} (Харківська обл.) Загроза застосування БПЛА."
+                    message = f"БПЛА {c} (Харківська обл.)"
                     messages.append(message)
                 continue
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -472,7 +472,7 @@ async def parse_kharkiv_message(text):
             city = zminyla_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -482,7 +482,7 @@ async def parse_kharkiv_message(text):
             city = znovu_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -495,7 +495,7 @@ async def parse_kharkiv_message(text):
             city = bpla_typu_match.group(3).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity_str}БПЛА \"{bpla_type}\" {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"{quantity_str}БПЛА \"{bpla_type}\" {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -505,7 +505,7 @@ async def parse_kharkiv_message(text):
             city = bpla_nevyzn_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -519,12 +519,12 @@ async def parse_kharkiv_message(text):
                 for c in cities:
                     c = fix_kharkiv_city_case(c)
                     c = c[0].upper() + c[1:] if c else c
-                    message = f"БПЛА {c} (Харківська обл.) Загроза застосування БПЛА."
+                    message = f"БПЛА {c} (Харківська обл.)"
                     messages.append(message)
                 continue
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -532,7 +532,7 @@ async def parse_kharkiv_message(text):
         zagroza_rayoniv_match = re.match(r'^[❗️‼️⚠️\s]*[Зз]агроза\s+для\s+(.+?)\s+р-в\s+міста[❗️‼️!\.]*$', line)
         if zagroza_rayoniv_match:
             districts = zagroza_rayoniv_match.group(1).strip()
-            message = f"БПЛА Харків ({districts} р-ни) (Харківська обл.) Загроза застосування БПЛА."
+            message = f"БПЛА Харків ({districts} р-ни) (Харківська обл.)"
             messages.append(message)
             continue
         
@@ -544,7 +544,7 @@ async def parse_kharkiv_message(text):
             city = bpla_na_match.group(2).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity_str}БПЛА {city} (Харківська обл.) Загроза застосування БПЛА."
+            message = f"{quantity_str}БПЛА {city} (Харківська обл.)"
             messages.append(message)
             continue
     
@@ -1123,7 +1123,7 @@ async def parse_and_split_message(text):
                 for city in cities:
                     city = fix_city_case(city)
                     city = city[0].upper() + city[1:] if city else city
-                    message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"БПЛА {city} ({region})"
                     messages.append(message)
                 continue
         
@@ -1137,7 +1137,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1150,7 +1150,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1161,7 +1161,7 @@ async def parse_and_split_message(text):
             city = bpla_qty_kursom_match.group(2).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {city} ({current_region})"
             messages.append(message)
             continue
         
@@ -1171,7 +1171,7 @@ async def parse_and_split_message(text):
             city = bpla_kursom_current_region_match.group(1).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+            message = f"БПЛА {city} ({current_region})"
             messages.append(message)
             continue
         
@@ -1184,7 +1184,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1198,7 +1198,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1212,7 +1212,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1223,7 +1223,7 @@ async def parse_and_split_message(text):
             rayon = ps_na_oblast_rayon_match.group(2).strip()
             region = REGION_MAP.get(short_region, None)
             if region:
-                message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {rayon} район ({region})"
                 messages.append(message)
                 continue
         
@@ -1236,7 +1236,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1250,7 +1250,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1263,7 +1263,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1276,7 +1276,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1289,7 +1289,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1302,7 +1302,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1345,7 +1345,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1358,7 +1358,7 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1370,7 +1370,7 @@ async def parse_and_split_message(text):
             region = REGION_MAP.get(short_region, None)
             if region:
                 # Виправляємо відмінок району (Нікопольський -> Нікопольський)
-                message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {rayon} район ({region})"
                 messages.append(message)
                 continue
         
@@ -1385,7 +1385,7 @@ async def parse_and_split_message(text):
                 for city in [city1, city2]:
                     city = fix_city_case(city)
                     city = city[0].upper() + city[1:] if city else city
-                    message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"БПЛА {city} ({region})"
                     messages.append(message)
                 continue
         
@@ -1401,7 +1401,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА {city} ({region})"
                 messages.append(message)
                 continue
         
@@ -1433,7 +1433,7 @@ async def parse_and_split_message(text):
             if not region.endswith('.'):
                 region = region + '.'
             
-            message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {city} ({region})"
             messages.append(message)
             continue
         
@@ -1457,7 +1457,7 @@ async def parse_and_split_message(text):
                 short_region_fixed = fix_city_case(short_region)
                 region = REGION_MAP.get(short_region_fixed, short_region_fixed + ' обл.')
             
-            message = f"{quantity}БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {rayon} район ({region})"
             messages.append(message)
             continue
         
@@ -1472,7 +1472,7 @@ async def parse_and_split_message(text):
             region = region[0].upper() + region[1:] if region else region
             if not region.endswith('.'):
                 region = region + '.'
-            message = f"{quantity}БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {rayon} район ({region})"
             messages.append(message)
             continue
         
@@ -1486,7 +1486,7 @@ async def parse_and_split_message(text):
             region = region[0].upper() + region[1:] if region else region
             if not region.endswith('.'):
                 region = region + '.'
-            message = f"БПЛА {rayon} район ({region}) Загроза застосування БПЛА."
+            message = f"БПЛА {rayon} район ({region})"
             messages.append(message)
             continue
         
@@ -1563,7 +1563,7 @@ async def parse_and_split_message(text):
             # Конвертуємо скорочену назву області в повну
             region = REGION_MAP.get(short_region, short_region + ' обл.')
             
-            message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {city} ({region})"
             messages.append(message)
             continue
         
@@ -1577,7 +1577,7 @@ async def parse_and_split_message(text):
             # Конвертуємо скорочену назву області в повну
             region = REGION_MAP.get(short_region, short_region + ' обл.')
             
-            message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+            message = f"{quantity}БПЛА {city} ({region})"
             messages.append(message)
             continue
         
@@ -1594,7 +1594,7 @@ async def parse_and_split_message(text):
                 region = CITY_TO_REGION[city]
             
             if region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
             continue
         
@@ -1607,7 +1607,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
             continue
         
@@ -1643,7 +1643,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА \"{bpla_type}\" {city} ({region}) Загроза застосування БПЛА."
+                message = f"БПЛА \"{bpla_type}\" {city} ({region})"
                 messages.append(message)
             continue
         
@@ -1678,23 +1678,23 @@ async def parse_and_split_message(text):
                 # Перевіряємо що таке city2
                 if city2.lower() in ['р-н', 'район', 'околиці', 'околиц']:
                     # →Хмельницький/р-н → "БПЛА Хмельницький район"
-                    message = f"{quantity}БПЛА {city1} район ({current_region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city1} район ({current_region})"
                     messages.append(message)
                 elif city2 in REGION_MAP or any(rk.lower() in city2.lower() for rk in REGION_MAP.keys()):
                     # →Кролевець/Чернігівщина → курсом на іншу область (БЕЗ поточної області в дужках)
-                    message = f"{quantity}БПЛА {city1} курсом на {city2}. Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city1} курсом на {city2}."
                     messages.append(message)
                 else:
                     # →Дніпро/Камʼянське → два міста, Місто1 курсом на Місто2
                     city2 = fix_city_case(city2)
                     city2 = city2[0].upper() + city2[1:] if city2 else city2
-                    message = f"{quantity}БПЛА {city1} курсом на {city2} ({current_region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city1} курсом на {city2} ({current_region})"
                     messages.append(message)
             else:
                 # Просто одне місто: →Васильківка
                 city = fix_city_case(content)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"{quantity}БПЛА {city} ({current_region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({current_region})"
                 messages.append(message)
             continue
         
@@ -1755,7 +1755,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
             continue
         
@@ -1773,7 +1773,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                message = f"{quantity}БПЛА {city} ({region})"
                 messages.append(message)
             continue
         
@@ -1790,7 +1790,7 @@ async def parse_and_split_message(text):
                 short_region = match.group(4).strip()
                 region = REGION_MAP.get(short_region, current_region)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
             
@@ -1803,7 +1803,7 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
             
@@ -1816,7 +1816,7 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
             
@@ -1832,7 +1832,7 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
             
@@ -1848,7 +1848,7 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if city and region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
             
@@ -1864,7 +1864,7 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if city and region:
-                    message = f"{quantity}БПЛА {city} ({region}) Загроза застосування БПЛА."
+                    message = f"{quantity}БПЛА {city} ({region})"
                     messages.append(message)
                 continue
     
