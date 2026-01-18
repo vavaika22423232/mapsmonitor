@@ -1022,6 +1022,10 @@ def fix_city_case(city):
         'Дунаївці': 'Дунаївці',
         'Чорнухи': 'Чорнухи',
         'Народичі': 'Народичі',
+        # Родовий відмінок (в напрямку)
+        'Просяної': 'Просяна',
+        'Синельникового': 'Синельникове',
+        'Павлограда': 'Павлоград',
     }
     
     if city in known_forms:
@@ -1110,17 +1114,18 @@ async def parse_and_split_message(text):
             continue
         
         # Формат ПС: "🛵 Чернігівщина: БпЛА в напрямку н.п. Березна, Ніжин, Борзна."
-        # Область: БпЛА в напрямку н.п. Місто1, Місто2
-        ps_region_np_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?\.?$', line, re.IGNORECASE)
+        # Область: БпЛА в напрямку н.п. Місто1, Місто2 - беремо тільки ПЕРШЕ місто
+        ps_region_np_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?[\.;]?$', line, re.IGNORECASE)
         if ps_region_np_match:
             short_region = ps_region_np_match.group(1).strip()
             cities_str = ps_region_np_match.group(2).strip()
             region = REGION_MAP.get(short_region, None)
             if region:
-                # Розділяємо міста по , та /
+                # Розділяємо міста по , та / і беремо ТІЛЬКИ ПЕРШЕ
                 cities_str = cities_str.replace('/', ',')
-                cities = [c.strip().rstrip('.') for c in cities_str.split(',') if c.strip()]
-                for city in cities:
+                cities = [c.strip().rstrip('.;') for c in cities_str.split(',') if c.strip()]
+                if cities:
+                    city = cities[0]  # Беремо тільки перше місто
                     city = fix_city_case(city)
                     city = city[0].upper() + city[1:] if city else city
                     message = f"БПЛА {city} ({region})"
