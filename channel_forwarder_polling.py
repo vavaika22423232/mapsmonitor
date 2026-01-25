@@ -14,7 +14,6 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
 import sys
-from groq import Groq
 
 logging.basicConfig(
     format='[%(levelname)s/%(asctime)s] %(message)s',
@@ -27,21 +26,8 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,kpszsu,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
-
-# Groq API конфігурація (ключ ОБОВ'ЯЗКОВО через env змінну GROQ_API_KEY)
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
-
-# Ініціалізація Groq клієнта
-groq_client = None
-if GROQ_API_KEY:
-    try:
-        groq_client = Groq(api_key=GROQ_API_KEY)
-        logger.info("✅ Groq клієнт ініціалізовано")
-    except Exception as e:
-        logger.warning(f"⚠️ Не вдалося ініціалізувати Groq: {e}")
 
 # Спеціальний канал для Харківщини (окремий парсер)
 KHARKIV_CHANNEL = 'monitor1654'
@@ -75,73 +61,6 @@ sent_locations_cache = {}
 
 # Клієнт з StringSession для Render
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
-
-
-async def parse_with_groq(text):
-    """
-    Використовує Groq LLM для парсингу складних повідомлень про загрози.
-    Повертає список структурованих повідомлень.
-    """
-    if not groq_client or not text:
-        return []
-    
-    try:
-        prompt = f"""Проаналізуй це повідомлення про повітряну загрозу в Україні та витягни інформацію про БПЛА/ракети.
-Для кожної загрози вкажи:
-1. Тип (БПЛА, КАБ, ракета, балістика)
-2. Кількість (якщо вказано)
-3. Місто/населений пункт
-4. Область
-
-Повідомлення:
-{text}
-
-Відповідь у форматі JSON масиву:
-[{{"type": "БПЛА", "quantity": "2х", "city": "Харків", "region": "Харківська обл."}}]
-
-Якщо немає конкретної інформації про загрози, поверни порожній масив []."""
-
-        response = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": "Ти експерт з аналізу повідомлень про повітряні загрози в Україні. Відповідай тільки валідним JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,
-            max_tokens=1000
-        )
-        
-        result_text = response.choices[0].message.content.strip()
-        
-        # Витягуємо JSON з відповіді
-        import json
-        # Шукаємо JSON масив в тексті
-        json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
-        if json_match:
-            threats = json.loads(json_match.group())
-            messages = []
-            for threat in threats:
-                threat_type = threat.get('type', 'БПЛА')
-                quantity = threat.get('quantity', '')
-                city = threat.get('city', '')
-                region = threat.get('region', '')
-                
-                if city and region:
-                    if quantity:
-                        msg = f"{quantity} {threat_type} {city} ({region}) Загроза застосування {threat_type}."
-                    else:
-                        msg = f"{threat_type} {city} ({region}) Загроза застосування {threat_type}."
-                    messages.append(msg)
-            
-            if messages:
-                logger.info(f"🤖 Groq розпізнав {len(messages)} загроз")
-            return messages
-        
-        return []
-        
-    except Exception as e:
-        logger.warning(f"⚠️ Помилка Groq парсингу: {e}")
-        return []
 
 
 def normalize_location(message):
@@ -418,8 +337,8 @@ async def parse_kharkiv_message(text):
             else:
                 city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "На ХТЗ" або "На Петрівку" або "На місто"
@@ -431,8 +350,8 @@ async def parse_kharkiv_message(text):
             else:
                 city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "Далі на ст.м. Академіка Барабашова" або "Далі на Хорошеве" або "Далі на місто"
@@ -447,13 +366,13 @@ async def parse_kharkiv_message(text):
                 for c in cities:
                     c = fix_kharkiv_city_case(c)
                     c = c[0].upper() + c[1:] if c else c
-                    message = f"БПЛА {c} (Харківська обл.)"
-                    messages.append(message)
+                    msg = f"БПЛА {c} (Харківська обл.)"
+                    messages.append(msg)
                 continue
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "КАБ на Тернову" або "КАБ на Куп'янськ" або "Повторні пуски КАБ на Тернову"
@@ -462,8 +381,8 @@ async def parse_kharkiv_message(text):
             city = kab_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"КАБ {city} (Харківська обл.) Загроза застосування КАБів."
-            messages.append(message)
+            msg = f"КАБ {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "Змінила курс на Великий Бурлук" або "Змінив курс на Старий Салтів"
@@ -472,8 +391,8 @@ async def parse_kharkiv_message(text):
             city = zminyla_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "Знову фіксується курсом на Бабаї"
@@ -482,21 +401,18 @@ async def parse_kharkiv_message(text):
             city = znovu_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "БПЛА типу "Шахед" курсом на Богодухів" або "+ 1 БПЛА типу "Молнія" курсом на Вільхівку"
         bpla_typu_match = re.match(r'^[+❗️‼️⚠️\s]*(\d+)?\s*(?:БПЛА|БпЛА)\s+типу\s*["\«]?([^"»]+)["\»]?\s*(?:курсом\s+на|продовжує\s+рух\s+на)\s+(.+?)[❗️‼️!\.]*$', line, re.IGNORECASE)
         if bpla_typu_match:
-            quantity = bpla_typu_match.group(1)
-            quantity_str = f"{quantity}х " if quantity else ""
-            bpla_type = bpla_typu_match.group(2).strip()
             city = bpla_typu_match.group(3).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity_str}БПЛА \"{bpla_type}\" {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "БПЛА невизначеного типу курсом на Рогань" або "БПЛА невизначеного типу, ймовірно, ударний, курсом на Шевченкове"
@@ -505,8 +421,8 @@ async def parse_kharkiv_message(text):
             city = bpla_nevyzn_match.group(1).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "▪️1 на Пересічне/Солоницівку" - bullet points
@@ -519,33 +435,30 @@ async def parse_kharkiv_message(text):
                 for c in cities:
                     c = fix_kharkiv_city_case(c)
                     c = c[0].upper() + c[1:] if c else c
-                    message = f"БПЛА {c} (Харківська обл.)"
-                    messages.append(message)
+                    msg = f"БПЛА {c} (Харківська обл.)"
+                    messages.append(msg)
                 continue
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "Загроза для Київського/Салтівського р-в міста"
         zagroza_rayoniv_match = re.match(r'^[❗️‼️⚠️\s]*[Зз]агроза\s+для\s+(.+?)\s+р-в\s+міста[❗️‼️!\.]*$', line)
         if zagroza_rayoniv_match:
-            districts = zagroza_rayoniv_match.group(1).strip()
-            message = f"БПЛА Харків ({districts} р-ни) (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА Харків (Харківська обл.)"
+            messages.append(msg)
             continue
         
         # Формат: "БПЛА на Місто" або "Nх БПЛА на Місто"
         bpla_na_match = re.match(r'^[🛸🛵⚠️❗️🔴\s]*(\d+)?\s*х?\s*(?:БПЛА|БпЛА|бпла)\s+(?:на|в\s+напрямку|курсом\s+на)\s+(.+?)[❗️‼️!\.]*$', line, re.IGNORECASE)
         if bpla_na_match:
-            quantity = bpla_na_match.group(1)
-            quantity_str = f"{quantity}х " if quantity else ""
             city = bpla_na_match.group(2).strip()
             city = fix_kharkiv_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity_str}БПЛА {city} (Харківська обл.)"
-            messages.append(message)
+            msg = f"БПЛА {city} (Харківська обл.)"
+            messages.append(msg)
             continue
     
     return messages
@@ -1138,14 +1051,13 @@ async def parse_and_split_message(text):
         ps_region_v_rayoni_match = re.match(r'^[🛵🛸\s]*(\S+):\s*(\d+)\s*(?:БпЛА|БПЛА)\s+в\s+район[іу]\s+(.+?)\.?$', line, re.IGNORECASE)
         if ps_region_v_rayoni_match:
             short_region = ps_region_v_rayoni_match.group(1).strip()
-            quantity = ps_region_v_rayoni_match.group(2) + 'х '
             city = ps_region_v_rayoni_match.group(3).strip().rstrip('.')
             region = REGION_MAP.get(short_region, None)
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 Житомирщина: БпЛА курсом на Коростень зі сходу." (1 БпЛА)
@@ -1157,19 +1069,18 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "Nх БпЛА курсом на Місто" (з кількістю і current_region)
         bpla_qty_kursom_match = re.match(r'^[🛵🛸\s]*(\d+)\s*х?\s*БпЛА\s+курсом\s+на\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?\s*$', line, re.IGNORECASE)
         if bpla_qty_kursom_match and current_region:
-            quantity = bpla_qty_kursom_match.group(1) + 'х '
             city = bpla_qty_kursom_match.group(2).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"{quantity}БПЛА {city} ({current_region})"
-            messages.append(message)
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
             continue
         
         # Формат ПС: "БпЛА курсом на Місто" (без кількості, з current_region)
@@ -1178,8 +1089,8 @@ async def parse_and_split_message(text):
             city = bpla_kursom_current_region_match.group(1).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            message = f"БПЛА {city} ({current_region})"
-            messages.append(message)
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
             continue
         
         # Формат ПС: "🛵 БпЛА на сході Дніпропетровщини повз Шахтарське курсом на захід."
@@ -1191,8 +1102,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА курсом на/повз Миколаїв з південного заходу."
@@ -1205,8 +1116,8 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА з півночі курсом на Харків."
@@ -1219,8 +1130,8 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА на Донеччині курсом на Харківщину (Лозівський район)."
@@ -1230,8 +1141,8 @@ async def parse_and_split_message(text):
             rayon = ps_na_oblast_rayon_match.group(2).strip()
             region = REGION_MAP.get(short_region, None)
             if region:
-                message = f"БПЛА {rayon} район ({region})"
-                messages.append(message)
+                msg = f"БПЛА {rayon} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА на півночі Чернігівщини курсом на Сновськ."
@@ -1243,8 +1154,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА повз Седнів курсом на Чернігів."
@@ -1257,8 +1168,8 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵Харківщина: БпЛА повз Ізюм на сході південно-західним курсом."
@@ -1270,8 +1181,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 Дніпропетровщина: БпЛА на півночі Павлограда, курс - західний"
@@ -1283,8 +1194,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА на/повз Очаків на Миколаївщину"
@@ -1296,8 +1207,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА на Харківщині в напрямку н.п.Великий Бурлук" або "🛵 БпЛА на Миколаївщині в напрямку Снігурівки"
@@ -1316,18 +1227,30 @@ async def parse_and_split_message(text):
         # Формат: "🧨Загроза застосування балістичного озброєння" - балістична загроза
         balistyka_match = re.search(r'загроза\s+(?:застосування\s+)?балістич', line, re.IGNORECASE)
         if balistyka_match:
-            message = "Загроза балістики!"
-            messages.append(message)
+            msg = "Балістика (Україна)"
+            messages.append(msg)
             continue
         
-        # Формат: "⚪️Відбій загрози застосування балістичного озброєння" - відбій балістичної загрози
+        # Формат: "⚪️Відбій загрози застосування балістичного озброєння" - відбій балістичної загрози (пропускаємо)
         vidbiy_balistyka_match = re.search(r'відбій\s+загроз[иі]\s+(?:застосування\s+)?балістич', line, re.IGNORECASE)
         if vidbiy_balistyka_match:
-            message = "Відбій загрози балістики!"
-            messages.append(message)
             continue
         
-        # Формат: "💣 Краматорський район (Донецька обл.)" - КАБи по району (тільки з emoji 💣)
+        # Формат: "� Ракета курсом на Київ" або "Крилата ракета на Харків"
+        raketa_match = re.match(r'^[🚀🔴⚠️❗️\s]*(?:крилат[аі]?\s+)?ракет[аи]?\s+(?:курсом\s+)?(?:на|в напрямку)\s+(.+?)(?:\s+з.+)?[!\.]*$', line, re.IGNORECASE)
+        if raketa_match:
+            city = raketa_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"Ракета {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "�💣 Краматорський район (Донецька обл.)" - КАБи по району (тільки з emoji 💣)
         if '💣' in line:
             kab_rayon_match = re.match(r'^[💣\s]*(.+?)\s+район\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
             if kab_rayon_match:
@@ -1337,14 +1260,13 @@ async def parse_and_split_message(text):
                 region = region[0].upper() + region[1:] if region else region
                 if not region.endswith('.'):
                     region = region + '.'
-                message = f"КАБ {rayon} район ({region}) Загроза застосування КАБів."
-                messages.append(message)
+                msg = f"КАБ {rayon} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат: "⚠️2х Шахеди на Запоріжжя!" - Шахеди/шахед на місто
         shahedy_na_match = re.match(r'^[⚠️❗️🔴\s]*(\d+)\s*х?\s*(?:Шахед[иі]?|шахед[иі]?)\s+на\s+(.+?)[!\.]*$', line, re.IGNORECASE)
         if shahedy_na_match:
-            quantity = shahedy_na_match.group(1) + 'х '
             city = shahedy_na_match.group(2).strip()
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
@@ -1352,8 +1274,8 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 БпЛА з Миколаївщини курсом на Одещину (вектор - Доброслав)"
@@ -1365,8 +1287,8 @@ async def parse_and_split_message(text):
             if region:
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵БпЛА на Нікопольський р-н Дніпропетровщини"
@@ -1377,8 +1299,8 @@ async def parse_and_split_message(text):
             region = REGION_MAP.get(short_region, None)
             if region:
                 # Виправляємо відмінок району (Нікопольський -> Нікопольський)
-                message = f"БПЛА {rayon} район ({region})"
-                messages.append(message)
+                msg = f"БПЛА {rayon} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат ПС: "🛵 Дніпропетровщина: БпЛА в напрямку Зеленодольська та Кривого Рогу"
@@ -1392,8 +1314,8 @@ async def parse_and_split_message(text):
                 for city in [city1, city2]:
                     city = fix_city_case(city)
                     city = city[0].upper() + city[1:] if city else city
-                    message = f"БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
         
         # Формат ПС: "🛵Змінив курс на Ріпки." - використовуємо current_region
@@ -1408,8 +1330,8 @@ async def parse_and_split_message(text):
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат 0: "бпла місто по межі (область) загроза..." - з "по межі" або подібними фразами
@@ -1440,8 +1362,8 @@ async def parse_and_split_message(text):
             if not region.endswith('.'):
                 region = region + '.'
             
-            message = f"{quantity}БПЛА {city} ({region})"
-            messages.append(message)
+            msg = f"БПЛА {city} ({region})"
+            messages.append(msg)
             continue
         
         # Формат 0.5: "БПЛА з Області курсом на Область (Район район обл.)" 
@@ -1471,7 +1393,6 @@ async def parse_and_split_message(text):
         # Формат: "7х БпЛА в Покровському районі (Київська обл.)" - кількість + район + область
         v_rayoni_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d+)\s*х?\s*(?:БпЛА|БПЛА)?\s*(?:в|у)\s+(.+?)\s+район[іу]?\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
         if v_rayoni_match:
-            quantity = v_rayoni_match.group(1) + 'х '
             rayon = v_rayoni_match.group(2).strip()
             region = v_rayoni_match.group(3).strip()
             # Capitalize
@@ -1479,8 +1400,8 @@ async def parse_and_split_message(text):
             region = region[0].upper() + region[1:] if region else region
             if not region.endswith('.'):
                 region = region + '.'
-            message = f"{quantity}БПЛА {rayon} район ({region})"
-            messages.append(message)
+            msg = f"БПЛА {rayon} ({region})"
+            messages.append(msg)
             continue
         
         # Формат: "БпЛА в Покровському районі (Київська обл.)" - без кількості
@@ -1493,8 +1414,8 @@ async def parse_and_split_message(text):
             region = region[0].upper() + region[1:] if region else region
             if not region.endswith('.'):
                 region = region + '.'
-            message = f"БПЛА {rayon} район ({region})"
-            messages.append(message)
+            msg = f"БПЛА {rayon} ({region})"
+            messages.append(msg)
             continue
         
         # Формат 1: "💥 Марганець (Дніпропетровська обл.)" або "🛸 Чернігів (Чернігівська обл.)"
@@ -1551,47 +1472,39 @@ async def parse_and_split_message(text):
             if not region.endswith('.'):
                 region = region + '.'
             
-            # Шукаємо опис загрози в наступному рядку
-            threat = threat_descriptions.get(i, "Загроза застосування БПЛА.")
-            # Обрізаємо зайве
-            threat = threat.split('.')[0] + '.' if '.' in threat else threat
-            
-            message = f"{city} ({region}) {threat}"
-            messages.append(message)
+            msg = f"БПЛА {city} ({region})"
+            messages.append(msg)
             continue
         
         # Формат 2: "🛸 Шахед курсом на Південноукраїнськ (Миколаївщина)" або "🛸 3 Шахеда курсом на Запоріжжя (Дніпропетровщина)"
         course_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*)\s*[Шш]ахед[іиіва]*\s+курсом\s+на\s+(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
         if course_match:
-            quantity = course_match.group(1) + 'х ' if course_match.group(1) else ''
             city = course_match.group(2).strip()
             short_region = course_match.group(3).strip()
             
             # Конвертуємо скорочену назву області в повну
             region = REGION_MAP.get(short_region, short_region + ' обл.')
             
-            message = f"{quantity}БПЛА {city} ({region})"
-            messages.append(message)
+            msg = f"БПЛА {city} ({region})"
+            messages.append(msg)
             continue
         
         # Формат 3: "⚠️2х БпЛА на Шостку (Сумщина)" - місто і скорочена область в дужках
         short_region_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|шахед[іиів]*)\s+(?:на\s+)?(.+?)\s*\((.+?)\)', line, re.IGNORECASE)
         if short_region_match:
-            quantity = short_region_match.group(1) or ''
             city = short_region_match.group(3).strip()
             short_region = short_region_match.group(4).strip()
             
             # Конвертуємо скорочену назву області в повну
             region = REGION_MAP.get(short_region, short_region + ' обл.')
             
-            message = f"{quantity}БПЛА {city} ({region})"
-            messages.append(message)
+            msg = f"БПЛА {city} ({region})"
+            messages.append(msg)
             continue
         
         # Формат 3: "⚠️8х БпЛА повз Кривий ріг на Кіровоградщину" - місто і область в тексті
         direction_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️\s]*(\d*х?\s*)?(БпЛА|БПЛА|шахед[іиів]*)\s+(?:повз|на|курсом на)\s+(.+?)\s+(?:на|в|до)\s+(.+?)$', line, re.IGNORECASE)
         if direction_match:
-            quantity = direction_match.group(1) or ''
             city = direction_match.group(3).strip()
             short_region = direction_match.group(4).strip()
             
@@ -1601,21 +1514,20 @@ async def parse_and_split_message(text):
                 region = CITY_TO_REGION[city]
             
             if region:
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат: 🛵5х Шахедів на Кривий Ріг! або 🛵Вже 5х Шахедів на місто!
         shahedy_na_match = re.match(r'^[🛵🛸💥⚠️❗️\s]*(?:Вже\s+)?(\d+)х?\s*[Шш]ахед[іиіва]*\s+на\s+(.+?)!?$', line, re.IGNORECASE)
         if shahedy_na_match:
-            quantity = shahedy_na_match.group(1) + 'х ' if shahedy_na_match.group(1) else ''
             city = await split_cities(shahedy_na_match.group(2).strip().rstrip('!'))
             region = current_region
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Перевіряємо чи це регіон (📡Харківщина: або просто Харківщина: або ✈️Дніпропетровщина:)
@@ -1710,7 +1622,6 @@ async def parse_and_split_message(text):
         if explosion_match:
             city = explosion_match.group(1).strip()
             region_in_parens = explosion_match.group(2)
-            description = explosion_match.group(3).strip() if explosion_match.group(3) else "Вибухи."
             
             # Видаляємо зайве з назви міста
             city = city.rstrip('/')
@@ -1736,52 +1647,33 @@ async def parse_and_split_message(text):
                     region = await get_region_by_city(city)
             
             if region:
-                # Формуємо опис
-                if 'вибух' in description.lower():
-                    threat = "Вибухи."
-                elif 'ппо' in description.lower():
-                    threat = "Працює ППО."
-                else:
-                    threat = description.split('.')[0] + '.' if '.' in description else description
-                message = f"{city} ({region}) {threat}"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат: ⚠️БпЛА курсом на Харків або ⚠️2х БпЛА курсом на Кривий Ріг або БпЛА курсом на Пʼятихатки
         bpla_kursom_match = re.match(r'^[⚠️❗️🔴\s]*(\d*х?\s*)?(БпЛА|БПЛА)\s+курсом\s+на\s+(.+?)\s*$', line, re.IGNORECASE)
         if bpla_kursom_match:
-            quantity = bpla_kursom_match.group(1) or ''
-            quantity = quantity.strip()
-            if quantity and not quantity.endswith('х'):
-                quantity = quantity + 'х'
-            if quantity:
-                quantity = quantity + ' '
             city = await split_cities(bpla_kursom_match.group(3).strip())
             # Використовуємо current_region або геокодинг
             region = current_region
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат: 3х БпЛА маневрують південніше Зеленодольська
         manevruyut_match = re.match(r'^[⚠️❗️🔴\s]*(\d*х?\s*)?(БпЛА|БПЛА)\s+маневрують\s+(?:південніше|північніше|західніше|східніше|біля|в районі)\s+(.+?)\s*$', line, re.IGNORECASE)
         if manevruyut_match:
-            quantity = manevruyut_match.group(1) or ''
-            quantity = quantity.strip()
-            if quantity and not quantity.endswith('х'):
-                quantity = quantity + 'х'
-            if quantity:
-                quantity = quantity + ' '
             city = await split_cities(manevruyut_match.group(3).strip())
             region = current_region
             if not region:
                 region = await get_region_by_city(city)
             if region:
-                message = f"{quantity}БПЛА {city} ({region})"
-                messages.append(message)
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Парсимо рядки з БпЛА/шахедами
@@ -1792,45 +1684,41 @@ async def parse_and_split_message(text):
             # Спроба 1: "число + шахед/шахедів/шахеди + через + місто + в бік + область"
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+через\s+(.+?)\s+в\s+бік\s+(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = match.group(3).strip()
                 short_region = match.group(4).strip()
                 region = REGION_MAP.get(short_region, current_region)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
             
             # Спроба 2: "число + шахед + кружляє біля/в районі + місто" (1 шахед кружляє біля Південноукраїнська)
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+кружляє\s+(?:біля|в районі)\s+(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
             
             # Спроба 3: "число + шахед + з + область + на + місто" (1 шахед з Сумщини на Талалаївку)
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+з\s+\S+\s+на\s+(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
             
             # Спроба 4: "число + шахед/шахедів/шахеди + на + місто" (1 шахед на Березнегувате)
             match = re.match(r'(\d+)\s*(шахед[іиів]*|БпЛА|БПЛА)\s+(?:курсом\s+)?на\s+(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = match.group(3).strip()
                 # Видаляємо "с." на початку (с.Рівне -> Рівне)
                 city = re.sub(r'^с\.', '', city).strip()
@@ -1839,14 +1727,13 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
             
             # Спроба 4: "числох БпЛА на місто"
             match = re.match(r'(\d+)х?\s*(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = match.group(1) + 'х ' if match.group(1) else ''
                 city = match.group(3).strip()
                 city = re.sub(r'\s*курсом.*$', '', city)
                 city = re.sub(r'\s*з\s+.*$', '', city)
@@ -1855,14 +1742,13 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if city and region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
             
             # Спроба 5: "БпЛА на місто" (без числа)
             match = re.match(r'(БпЛА|БПЛА)\s*(?:курсом\s+)?(?:на\s+)?(.+)$', line, re.IGNORECASE)
             if match:
-                quantity = ''
                 city = match.group(2).strip()
                 city = re.sub(r'\s*курсом.*$', '', city)
                 city = re.sub(r'\s*з\s+.*$', '', city)
@@ -1871,18 +1757,9 @@ async def parse_and_split_message(text):
                 if not region:
                     region = await get_region_by_city(city)
                 if city and region:
-                    message = f"{quantity}БПЛА {city} ({region})"
-                    messages.append(message)
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
                 continue
-    
-    # Якщо звичайний парсер не знайшов нічого і є Groq - пробуємо AI парсинг
-    if not messages and groq_client and text and len(text) > 20:
-        # Перевіряємо чи текст містить ключові слова про загрози
-        if any(kw in text.lower() for kw in ['бпла', 'шахед', 'ракет', 'каб', 'дрон', 'загроз', 'курсом', 'напрямку']):
-            logger.info("🤖 Пробуємо Groq для складного повідомлення...")
-            groq_messages = await parse_with_groq(text)
-            if groq_messages:
-                messages.extend(groq_messages)
     
     # Повертаємо знайдені повідомлення
     return messages
@@ -1934,30 +1811,6 @@ async def check_and_forward():
                 if message.id > last_message_ids[channel]:
                     # Нове повідомлення!
                     logger.info(f"🆕 Нове повідомлення в @{channel}: ID {message.id}")
-                    
-                    # Канал @kpszsu - пересилаємо ВСІ повідомлення без фільтрації
-                    if channel.lower() == 'kpszsu':
-                        try:
-                            if message.text:
-                                if message.media:
-                                    await client.send_message(
-                                        TARGET_CHANNEL,
-                                        message.text,
-                                        file=message.media
-                                    )
-                                else:
-                                    await client.send_message(
-                                        TARGET_CHANNEL,
-                                        message.text
-                                    )
-                                logger.info(f"✅ [@kpszsu] Переслано без фільтрації: {message.text[:50]}...")
-                                forwarded_count += 1
-                            last_message_ids[channel] = message.id
-                            continue
-                        except Exception as e:
-                            logger.error(f"❌ Помилка пересилання з @kpszsu: {e}")
-                            last_message_ids[channel] = message.id
-                            continue
                     
                     # Розбиваємо повідомлення на окремі
                     split_messages = await parse_and_split_message(message.text)
