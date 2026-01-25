@@ -1028,6 +1028,45 @@ async def parse_and_split_message(text):
         if re.search(r'повітряна\s+тривога|відбій\s+тривоги|прямуйте\s+в\s+укриття|будьте\s+обережні', line, re.IGNORECASE):
             continue
         
+        # Формат заголовка: "4 шахеди на Чернігівщині:" або "1 шахед на Полтавщині:"
+        header_region_match = re.match(r'^\d+\s+(?:шахед[іиів]*|БпЛА|БПЛА)\s+на\s+(\S+):?\s*$', line, re.IGNORECASE)
+        if header_region_match:
+            short_region = header_region_match.group(1).strip().rstrip(':')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                current_region = region
+            continue
+        
+        # Формат: "1 повз Славутич південним курсом" або "2 на Сновськ зі сходу"
+        povz_city_match = re.match(r'^\d+\s+(?:повз|на)\s+(\S+)(?:\s+.+)?$', line, re.IGNORECASE)
+        if povz_city_match and current_region:
+            city = povz_city_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "1 кружляє між Гадячем та Зіньковом" - беремо перше місто
+        kruzhlyaye_match = re.match(r'^\d+\s+кружляє\s+(?:між|біля|в районі)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
+        if kruzhlyaye_match and current_region:
+            city = kruzhlyaye_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "1 маневрує північніше Кам'янського"
+        manevruje_match = re.match(r'^\d+\s+маневрує\s+(?:північніше|південніше|західніше|східніше|біля)\s+(\S+)$', line, re.IGNORECASE)
+        if manevruje_match and current_region:
+            city = manevruje_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
         # Формат ПС: "🛵 Чернігівщина: БпЛА в напрямку н.п. Березна, Ніжин, Борзна."
         # Область: БпЛА в напрямку н.п. Місто1, Місто2 - беремо тільки ПЕРШЕ місто
         ps_region_np_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?[\.;]?$', line, re.IGNORECASE)
