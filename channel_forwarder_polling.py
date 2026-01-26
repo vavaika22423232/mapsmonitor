@@ -218,6 +218,9 @@ CITY_TO_REGION = {
     'Луцьк': 'Волинська обл.',
     'Ужгород': 'Закарпатська обл.',
     'Кропивницький': 'Кіровоградська обл.',
+    # Спеціальні локації
+    'Чорне море': 'Одеська обл.',
+    'Чорному морі': 'Одеська обл.',
 }
 
 # Кеш для геокодингу (щоб не робити зайвих запитів) - використовується як fallback
@@ -414,6 +417,25 @@ async def parse_and_split_message(text):
         msg = f"{location} ({region})\nвибухи."
         return [msg]
     
+    # Формат: "💥 Павлоград - вибухи" (без області в дужках)
+    vybukhy_no_region_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*[-–—]\s*вибух', text, re.IGNORECASE | re.MULTILINE)
+    if vybukhy_no_region_match:
+        city = vybukhy_no_region_match.group(1).strip()
+        # Видаляємо emoji з назви міста
+        city = re.sub(r'^[💥⚠️❗️\s]+', '', city).strip()
+        if city:
+            # Використовуємо геокодер для визначення області
+            region = None
+            if GEOCODER_AVAILABLE:
+                region = geocoder_get_region(city)
+            if not region:
+                region = CITY_TO_REGION.get(city)
+            if region:
+                if not region.endswith('.'):
+                    region = region + '.'
+                msg = f"{city} ({region})\nвибухи."
+                return [msg]
+    
     # Обробка повідомлень про високошвидкісні цілі (ракети)
     # Формат: "🚀 Харків (Харківська обл.) Загроза застосування високошвидкісних цілей..."
     raketa_match = re.search(r'^[🚀⚠️❗️\s]*(.+?)\s*\((.+?обл\.?)\)[\s\n]*Загроза\s+застосування\s+високошвидкісних\s+цілей', text, re.IGNORECASE | re.MULTILINE)
@@ -564,6 +586,20 @@ async def parse_and_split_message(text):
                 messages.append(msg)
                 continue
         
+        # Формат: "6 шахедів в Чорному морі" або "N шахедів в/у локації"
+        shahedy_v_match = re.match(r'^(\d+)\s+шахед[іиів]*\s+[ву]\s+(.+?)$', line, re.IGNORECASE)
+        if shahedy_v_match:
+            location = shahedy_v_match.group(2).strip()
+            # Перевіряємо чи є в словнику (напр. "Чорному морі")
+            region = CITY_TO_REGION.get(location, None)
+            if region:
+                # Нормалізуємо назву (Чорному морі -> Чорне море)
+                if 'морі' in location.lower():
+                    location = 'Чорне море'
+                msg = f"БПЛА {location} ({region})"
+                messages.append(msg)
+                continue
+        
         # Формат: "На Кривий Ріг вже N шт" або "На X заходять"
         na_city_match = re.match(r'^[Нн]а\s+(.+?)\s+(?:вже|заходять|заходить|летить|летять)', line, re.IGNORECASE)
         if na_city_match:
@@ -637,12 +673,15 @@ async def parse_and_split_message(text):
             messages.append(msg)
             continue
         
-        # Формат: "1 кружляє між Гадячем та Зіньковом" - беремо перше місто
-        kruzhlyaye_match = re.match(r'^\d+\s+кружляє\s+(?:між|біля|в районі)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
+        # Формат: "1 кружляє між Гадячем та Зіньковом" або "1 крутиться в районі X" - беремо перше місто
+        kruzhlyaye_match = re.match(r'^\d+\s+(?:кружляє|крутиться|крутяться)\s+(?:між|біля|в районі|в район|в)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
         if kruzhlyaye_match and current_region:
             city = kruzhlyaye_match.group(1).strip()
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
+            # Перевіряємо чи це "морі" -> Чорне море
+            if city.lower() == 'морі':
+                city = 'Чорне море'
             msg = f"БПЛА {city} ({current_region})"
             messages.append(msg)
             continue
@@ -651,6 +690,86 @@ async def parse_and_split_message(text):
         manevruje_match = re.match(r'^\d+\s+маневрує\s+(?:північніше|південніше|західніше|східніше|біля)\s+(\S+)$', line, re.IGNORECASE)
         if manevruje_match and current_region:
             city = manevruje_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "2 в районі Васильківки" або "1 в район Кам'янського"
+        v_rayoni_simple_match = re.match(r'^(\d+)\s+в\s+район[іу]?\s+(\S+)$', line, re.IGNORECASE)
+        if v_rayoni_simple_match and current_region:
+            city = v_rayoni_simple_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "1 над лівобережжям Дніпра" або "2 над Кривим Рогом"
+        nad_match = re.match(r'^(\d+)\s+над\s+(?:лівобережжям|правобережжям)?\s*(\S+)$', line, re.IGNORECASE)
+        if nad_match and current_region:
+            city = nad_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "1 на Лозуватку (через це тривога...)" або "1 південніше Дніпра (Тополя)" - місто з поясненням в дужках
+        na_city_poyasn_match = re.match(r'^(\d+)\s+(?:на|південніше|північніше|західніше|східніше)\s+(\S+)\s*\([^)]+\)$', line, re.IGNORECASE)
+        if na_city_poyasn_match and current_region:
+            city = na_city_poyasn_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "Шахед курсом на Шостку" - без кількості
+        shahed_kursom_match = re.match(r'^[Шш]ахед\s+курсом\s+на\s+(\S+)$', line, re.IGNORECASE)
+        if shahed_kursom_match and current_region:
+            city = shahed_kursom_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "3 курсом на Татарбунари" - N курсом на X
+        n_kursom_match = re.match(r'^(\d+)\s+курсом\s+на\s+(\S+)$', line, re.IGNORECASE)
+        if n_kursom_match and current_region:
+            city = n_kursom_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "1 на/через Славгород" - на/через або на Місто
+        na_cherez_match = re.match(r'^(\d+)\s+(?:на/через|через)\s+(\S+)$', line, re.IGNORECASE)
+        if na_cherez_match and current_region:
+            city = na_cherez_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "2 Синельникове / Васильківка" - N Місто1 / Місто2 (беремо перше)
+        n_cities_match = re.match(r'^(\d+)\s+(\S+)\s*/\s*(\S+)$', line, re.IGNORECASE)
+        if n_cities_match and current_region:
+            city = n_cities_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
+            continue
+        
+        # Формат: "Акустично шахед між Кременчуком та Горішніми Плавнями" - беремо перше місто
+        akustychno_match = re.match(r'^[Аа]кустично\s+шахед\s+(?:між|біля|в районі)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
+        if akustychno_match and current_region:
+            city = akustychno_match.group(1).strip()
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
             msg = f"БПЛА {city} ({current_region})"
@@ -1051,6 +1170,11 @@ async def parse_and_split_message(text):
         # Готові повідомлення з містом та областю (може бути текст після області)
         ready_match = re.match(r'^[💥🛸🛵⚠️❗️🔴👁️🚀✈️\s]*(.+?)\s*\((.+?обл\.?)\)', line, re.IGNORECASE)
         if ready_match:
+            # ВАЖЛИВО: Перевіряємо чи наступний рядок містить "вибухи" - тоді пропускаємо (вже оброблено раніше)
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            if 'вибух' in next_line.lower() or 'вибух' in line.lower():
+                continue  # Пропускаємо - це повідомлення про вибухи, оброблено вище
+            
             # ВАЖЛИВО: Перевіряємо тип загрози ДО видалення emoji
             # 🚀 = Ракета, інші emoji (🛸, 🛵, 💥) = БПЛА
             threat_type = "Ракета" if '🚀' in line else "БПЛА"
