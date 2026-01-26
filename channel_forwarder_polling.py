@@ -1247,22 +1247,30 @@ async def parse_and_split_message(text):
             continue
         
         # Формат: →Місто1/Місто2 або →Місто1/Місто2(Nх) або →Місто/р-н
-        # Приклади: →Дніпро/Камʼянське → "БПЛА Дніпро курсом на Камʼянське"
-        #           →Кролевець/Чернігівщина(2х) → "2х БПЛА Кролевець курсом на Чернігівщину"
-        #           →Хмельницький/р-н → "БПЛА Хмельницький район"
+        # Приклади: →Охтирка/Харківщина(3х) → "БПЛА Охтирка (Сумська обл.)" (Харківщина = напрямок, ігноруємо)
+        #           →Водолага/Коломак (3х) → "БПЛА Коломак (Харківська обл.)" (беремо кінцевий пункт)
+        #           →Олександрія/р-н (2х) → "БПЛА Олександрія (Кіровоградська обл.)"
+        #           →Дніпропетровщина (3х) → пропускаємо (це область, не місто)
         arrow_match = re.match(r'^[→➡️]\s*(.+?)\s*[\.;]?$', line)
         if arrow_match and current_region:
             content = arrow_match.group(1).strip()
             
-            # Витягуємо кількість з дужок (7х), (3х) тощо
-            quantity = ''
+            # Витягуємо кількість з дужок (7х), (3х) тощо - але НЕ додаємо до результату
             quantity_match = re.search(r'\((\d+)х?\)', content)
             if quantity_match:
-                quantity = quantity_match.group(1) + 'х '
                 content = re.sub(r'\s*\(\d+х?\)', '', content)
             
             # Видаляємо крапки та крапки з комою в кінці
             content = content.rstrip('.;')
+            
+            # Перевіряємо чи весь content це назва області - тоді пропускаємо
+            is_only_region = False
+            for region_key in REGION_MAP.keys():
+                if content.lower().strip() == region_key.lower() or content.lower().rstrip('аиуіїею') == region_key.lower().rstrip('аиуіїею'):
+                    is_only_region = True
+                    break
+            if is_only_region:
+                continue
             
             # Перевіряємо чи є / в рядку
             if '/' in content:
@@ -1270,30 +1278,30 @@ async def parse_and_split_message(text):
                 city1 = parts[0].strip()
                 city2 = parts[1].strip() if len(parts) > 1 else ''
                 
-                # Виправляємо відмінки
-                city1 = fix_city_case(city1)
-                city1 = city1[0].upper() + city1[1:] if city1 else city1
-                
                 # Перевіряємо що таке city2
                 if city2.lower() in ['р-н', 'район', 'околиці', 'околиц']:
-                    # →Хмельницький/р-н → "БПЛА Хмельницький район"
-                    message = f"{quantity}БПЛА {city1} район ({current_region})"
+                    # →Олександрія/р-н → "БПЛА Олександрія (Область)"
+                    city1 = fix_city_case(city1)
+                    city1 = city1[0].upper() + city1[1:] if city1 else city1
+                    message = f"БПЛА {city1} ({current_region})"
                     messages.append(message)
                 elif city2 in REGION_MAP or any(rk.lower() in city2.lower() for rk in REGION_MAP.keys()):
-                    # →Кролевець/Чернігівщина → курсом на іншу область (БЕЗ поточної області в дужках)
-                    message = f"{quantity}БПЛА {city1} курсом на {city2}."
+                    # →Охтирка/Харківщина → city2 це область/напрямок, беремо тільки city1
+                    city1 = fix_city_case(city1)
+                    city1 = city1[0].upper() + city1[1:] if city1 else city1
+                    message = f"БПЛА {city1} ({current_region})"
                     messages.append(message)
                 else:
-                    # →Дніпро/Камʼянське → два міста, Місто1 курсом на Місто2
+                    # →Водолага/Коломак → два міста, беремо КІНЦЕВИЙ пункт (city2)
                     city2 = fix_city_case(city2)
                     city2 = city2[0].upper() + city2[1:] if city2 else city2
-                    message = f"{quantity}БПЛА {city1} курсом на {city2} ({current_region})"
+                    message = f"БПЛА {city2} ({current_region})"
                     messages.append(message)
             else:
                 # Просто одне місто: →Васильківка
                 city = fix_city_case(content)
                 city = city[0].upper() + city[1:] if city else city
-                message = f"{quantity}БПЛА {city} ({current_region})"
+                message = f"БПЛА {city} ({current_region})"
                 messages.append(message)
             continue
         
