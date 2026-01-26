@@ -15,6 +15,15 @@ from telethon.sessions import StringSession
 import os
 import sys
 
+# Імпортуємо геокодер для автоматичного визначення області
+try:
+    from geocoder import get_region as geocoder_get_region
+    GEOCODER_AVAILABLE = True
+    print("[INFO] Geocoder module loaded successfully", flush=True)
+except ImportError:
+    GEOCODER_AVAILABLE = False
+    print("[WARNING] Geocoder module not available, using fallback", flush=True)
+
 logging.basicConfig(
     format='[%(levelname)s/%(asctime)s] %(message)s',
     level=logging.INFO
@@ -26,7 +35,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa,raketa_trevoga,monikppy').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Інтервал опитування (секунди)
@@ -279,23 +288,44 @@ CITY_TO_REGION = {
     'Краматорськ': 'Донецька обл.',
     # Одеська область
     'Доброслав': 'Одеська обл.',
+    # Кіровоградська область
+    'Долинська': 'Кіровоградська обл.',
+    # Райони Кривого Рогу (для контексту "Кривий Ріг:")
+    'Саксагань': 'Дніпропетровська обл.',
+    'Довгинцеве': 'Дніпропетровська обл.',
+    'Соцмісто': 'Дніпропетровська обл.',
+    'Арселор': 'Дніпропетровська обл.',
+    'Зарічний': 'Дніпропетровська обл.',
+    'Новомайське': 'Дніпропетровська обл.',
 }
 
-# Кеш для геокодингу (щоб не робити зайвих запитів)
+# Кеш для геокодингу (щоб не робити зайвих запитів) - використовується як fallback
 geo_cache = {}
 
-async def get_region_by_city(city_name):
+async def get_region_by_city(city_name, hint_region=None):
     """
-    Отримує область за назвою міста через Nominatim API (OpenStreetMap)
+    Отримує область за назвою міста.
+    Спочатку пробує OpenCage геокодер, потім локальний словник, потім Nominatim.
     """
-    # Спочатку перевіряємо локальний словник
+    # Спочатку перевіряємо локальний словник (швидко і безкоштовно)
     if city_name in CITY_TO_REGION:
         return CITY_TO_REGION[city_name]
     
-    # Перевіряємо кеш
+    # Пробуємо OpenCage геокодер (з кешуванням)
+    if GEOCODER_AVAILABLE:
+        try:
+            region = geocoder_get_region(city_name, hint_region)
+            if region:
+                logger.info(f"🌍 Геокодер: {city_name} -> {region}")
+                return region
+        except Exception as e:
+            logger.warning(f"⚠️ Помилка геокодера для {city_name}: {e}")
+    
+    # Перевіряємо локальний кеш
     if city_name in geo_cache:
         return geo_cache[city_name]
     
+    # Fallback: Nominatim API (OpenStreetMap)
     try:
         url = "https://nominatim.openstreetmap.org/search"
         params = {
@@ -326,7 +356,7 @@ async def get_region_by_city(city_name):
                             
                             # Зберігаємо в кеш
                             geo_cache[city_name] = region
-                            logger.info(f"🌍 Геокодинг: {city_name} -> {region}")
+                            logger.info(f"🌍 Nominatim: {city_name} -> {region}")
                             return region
     except asyncio.TimeoutError:
         logger.warning(f"⚠️ Таймаут геокодингу для {city_name}")
@@ -497,6 +527,11 @@ def fix_city_case(city):
         'Очакова': 'Очаків',
         'Снігурівки': 'Снігурівка',
         'Доброслава': 'Доброслав',
+        'Долинської': 'Долинська',
+        # Райони Кривого Рогу
+        'Саксагані': 'Саксагань',
+        'Довгинцевого': 'Довгинцеве',
+        'Павлограда': 'Павлоград',
         # Кривий Ріг у родовому
         'Кривого Рогу': 'Кривий Ріг',
         # Міста з множинною формою (НЕ змінювати!)
@@ -615,8 +650,8 @@ async def parse_and_split_message(text):
         return [msg]
     
     # Обробка повідомлень про вибухи окремо
-    # Формат: "⚠️ Місто (Область) ЗМІ повідомляють про вибухи..."
-    vybukhy_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*\((.+?обл\.?)\)\s*\n?\s*(?:ЗМІ\s+)?повідомляють\s+про\s+вибухи', text, re.IGNORECASE | re.MULTILINE)
+    # Формат: "⚠️ Місто (Область) ЗМІ повідомляють про вибухи..." або "⚠️ Місто (Область)\nЗМІ повідомляють..."
+    vybukhy_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*\((.+?обл\.?)\)[\s\n]*(?:ЗМІ\s+)?повідомляють\s+про\s+вибухи', text, re.IGNORECASE | re.MULTILINE)
     if vybukhy_match:
         location = vybukhy_match.group(1).strip()
         region = vybukhy_match.group(2).strip()
@@ -625,13 +660,32 @@ async def parse_and_split_message(text):
         msg = f"{location} ({region})\nвибухи."
         return [msg]
     
-    # Пропускаємо повідомлення про загрози обстрілу, укриття тощо
-    if re.search(r'загроза\s+обстрілу|перейдіть\s+в\s+укриття|прямуйте\s+в\s+укриття|негайно\s+прямуйте|будьте\s+обережні', text, re.IGNORECASE):
-        return []
+    # Обробка повідомлень про високошвидкісні цілі (ракети)
+    # Формат: "🚀 Харків (Харківська обл.) Загроза застосування високошвидкісних цілей..."
+    raketa_match = re.search(r'^[🚀⚠️❗️\s]*(.+?)\s*\((.+?обл\.?)\)[\s\n]*Загроза\s+застосування\s+високошвидкісних\s+цілей', text, re.IGNORECASE | re.MULTILINE)
+    if raketa_match:
+        location = raketa_match.group(1).strip()
+        region = raketa_match.group(2).strip()
+        if not region.endswith('.'):
+            region = region + '.'
+        msg = f"Ракета {location} ({region})"
+        return [msg]
+    
+    # Пропускаємо повідомлення про загрози обстрілу, укриття тощо (АЛЕ НЕ вибухи та ракети!)
+    if re.search(r'загроза\s+обстрілу|перейдіть\s+в\s+укриття|прямуйте\s+в\s+укриття|негайно\s+прямуйте', text, re.IGNORECASE):
+        # Перевіряємо чи це не повідомлення про вибухи або ракети
+        if not re.search(r'вибух|високошвидкісн', text, re.IGNORECASE):
+            return []
+    
+    # Окрема перевірка "будьте обережні" - пропускаємо тільки якщо немає інфи про вибухи
+    if re.search(r'будьте\s+обережні', text, re.IGNORECASE):
+        if not re.search(r'вибух|високошвидкісн', text, re.IGNORECASE):
+            return []
     
     messages = []
     lines = text.strip().split('\n')
     current_region = None
+    current_city = None  # Для контексту районів міста (напр. "Кривий Ріг:")
     
     # Зберігаємо наступний рядок як опис загрози
     lines_list = text.strip().split('\n')
@@ -648,7 +702,146 @@ async def parse_and_split_message(text):
             continue
         
         # Пропускаємо повідомлення про повітряну тривогу, відбій та загрозу обстрілу (не БПЛА/КАБ)
-        if re.search(r'повітряна\s+тривога|відбій\s+тривоги|прямуйте\s+в\s+укриття|перейдіть\s+в\s+укриття|будьте\s+обережні|загроза\s+обстрілу', line, re.IGNORECASE):
+        # НЕ пропускаємо "будьте обережні" - воно може бути частиною повідомлення про вибухи
+        if re.search(r'повітряна\s+тривога|відбій\s+тривоги|прямуйте\s+в\s+укриття|перейдіть\s+в\s+укриття|загроза\s+обстрілу', line, re.IGNORECASE):
+            continue
+        
+        # Формат заголовка: "✈️Дніпропетровщина:" або "🛵Харківщина:" або просто "Дніпропетровщина:" - область з/без emoji і двокрапкою
+        emoji_region_header_match = re.match(r'^[✈️🛵🛸⚠️\s]*(\S+):\s*$', line, re.IGNORECASE)
+        if emoji_region_header_match:
+            short_region = emoji_region_header_match.group(1).strip()
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                current_region = region
+                current_city = None  # Скидаємо поточне місто
+            continue
+        
+        # Формат заголовка міста: "⚠️ Кривий Ріг:" або "Кривий Ріг:" - місто з двокрапкою (для районів міста)
+        city_header_match = re.match(r'^[⚠️‼️\s]*(.+?):\s*$', line, re.IGNORECASE)
+        if city_header_match:
+            potential_city = city_header_match.group(1).strip()
+            # Перевіряємо чи це місто, а не область
+            if potential_city in CITY_TO_REGION:
+                current_city = potential_city
+                current_region = CITY_TO_REGION[potential_city]
+                continue
+            # Також перевіряємо область
+            region = REGION_MAP.get(potential_city, None)
+            if region:
+                current_region = region
+                current_city = None
+                continue
+        
+        # Формат: "‼️ Кривий Ріг - 7 шахедів заходять на місто" - місто з тире
+        city_dash_match = re.match(r'^[⚠️‼️\s]*(.+?)\s*[-–—]\s*\d*\s*шахед', line, re.IGNORECASE)
+        if city_dash_match:
+            city = city_dash_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "Шахед від X повернувся на Y" або "Шахед знову на Y"
+        shahed_na_match = re.match(r'^[Шш]ахед\s+(?:від\s+\S+\s+)?(?:повернувся|знову)\s+на\s+(\S+)', line, re.IGNORECASE)
+        if shahed_na_match:
+            city = shahed_na_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "Шахед курсом на X" (в контексті міста)
+        shahed_kursom_match = re.match(r'^[Шш]ахед\s+курсом\s+на\s+(\S+)', line, re.IGNORECASE)
+        if shahed_kursom_match:
+            city = shahed_kursom_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "N крутиться/кружляє біля X" 
+        krutytsya_match = re.match(r'^\d+\s+(?:крутиться|кружляє|кружляють)\s+біля\s+(\S+)', line, re.IGNORECASE)
+        if krutytsya_match:
+            city = krutytsya_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "N шахеди/шахедів на X з Y" або "N шахеди на X"
+        shahedy_na_match = re.match(r'^\d+\s+шахед[іиів]*\s+на\s+(\S+)(?:\s+з\s+.+)?', line, re.IGNORECASE)
+        if shahedy_na_match:
+            city = shahedy_na_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "На Кривий Ріг вже N шт" або "На X заходять"
+        na_city_match = re.match(r'^[Нн]а\s+(.+?)\s+(?:вже|заходять|заходить|летить|летять)', line, re.IGNORECASE)
+        if na_city_match:
+            city = na_city_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "1 Арселор" або "1 на п'ятий Зарічний" або "1 в районі X" (в контексті current_city)
+        rayon_match = re.match(r'^\d+\s+(?:на\s+(?:п\'ятий\s+)?|в\s+район[іу]\s+)?(\S+)\s*$', line, re.IGNORECASE)
+        if rayon_match and current_city:
+            rayon = rayon_match.group(1).strip()
+            # Якщо це район міста, виводимо місто
+            msg = f"БПЛА {current_city} ({current_region})"
+            if msg not in messages:  # Уникаємо дублікатів
+                messages.append(msg)
+            continue
+        
+        # Формат зі стрілкою: "→Павлоград/р-н (кружляє);" або "→Кривий Ріг/р-н."
+        arrow_city_match = re.match(r'^[→➡️\s]*(.+?)/р-н\.?(?:\s*\([^)]*\))?[;\.]*\s*$', line, re.IGNORECASE)
+        if arrow_city_match and current_region:
+            city = arrow_city_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            msg = f"БПЛА {city} ({current_region})"
+            messages.append(msg)
             continue
         
         # Формат заголовка: "4 шахеди на Чернігівщині:" або "1 шахед на Полтавщині:"
@@ -1109,6 +1302,13 @@ async def parse_and_split_message(text):
             
             # Видаляємо "Ст." на початку (Ст.Салтів -> Салтів)
             city = re.sub(r'^Ст\.?\s*', '', city, flags=re.IGNORECASE).strip()
+            
+            # ВАЖЛИВО: Якщо є "Місто та Місто2" або "Місто1 та Місто2" - беремо тільки перше місто
+            if ' та ' in city:
+                city = city.split(' та ')[0].strip()
+            
+            # Видаляємо "з Області" конструкцію (напр. "Долинська з Дніпропетровщини" -> "Долинська")
+            city = re.sub(r'\s+з\s+(?:Сумщини|Чернігівщини|Полтавщини|Черкащини|Київщини|Харківщини|Дніпропетровщини|Миколаївщини|Одещини|Херсонщини|Запоріжжя|Донеччини|Луганщини|Житомирщини|Вінниччини|Хмельниччини|Рівненщини|Волині|Львівщини|Тернопільщини|Івано-Франківщини|Закарпаття|Кіровоградщини)\s*$', '', city, flags=re.IGNORECASE).strip()
             
             # Видаляємо "в районі", "по межі", "у напрямку", "в напрямку" тощо на початку
             city = re.sub(r'^(\d*х?\s*)?(в районі|по межі|на межі|біля межі|[уів]\s+напрямку|на)\s+', '', city, flags=re.IGNORECASE).strip()
