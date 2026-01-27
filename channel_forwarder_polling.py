@@ -424,12 +424,21 @@ async def parse_and_split_message(text):
         return [msg]
     
     # Формат: "💥 Павлоград - вибухи" (без області в дужках)
-    vybukhy_no_region_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*[-–—]\s*вибух', text, re.IGNORECASE | re.MULTILINE)
+    vybukhy_no_region_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*[-–—]\s*(?:чули\s+)?вибух', text, re.IGNORECASE | re.MULTILINE)
     if vybukhy_no_region_match:
         city = vybukhy_no_region_match.group(1).strip()
         # Видаляємо emoji з назви міста
         city = re.sub(r'^[💥⚠️❗️\s]+', '', city).strip()
         if city:
+            # Перевіряємо чи це назва області (Чернігівщина, Харківщина тощо)
+            region_from_map = REGION_MAP.get(city)
+            if region_from_map:
+                # Це область - виводимо як "Область обл.\nвибухи."
+                if not region_from_map.endswith('.'):
+                    region_from_map = region_from_map + '.'
+                msg = f"{region_from_map}\nвибухи."
+                return [msg]
+            
             # Використовуємо геокодер для визначення області
             region = None
             if GEOCODER_AVAILABLE:
@@ -1267,7 +1276,7 @@ async def parse_and_split_message(text):
             # Видаляємо "бпла" з назви міста
             city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
             # Видаляємо "(невст.тип)" або "(Невст.тип)" або "(невизначеного типу)"
-            city = re.sub(r'\([Нн]евс?т?\.?\s*тип\)', '', city, flags=re.IGNORECASE).strip()
+            city = re.sub(r'\(невст\.тип\)', '', city, flags=re.IGNORECASE).strip()
             city = re.sub(r'\([Нн]евизначеного\s+типу\)', '', city, flags=re.IGNORECASE).strip()
             # Видаляємо "на " на початку (після видалення невст.тип)
             city = re.sub(r'^на\s+', '', city, flags=re.IGNORECASE).strip()
