@@ -622,7 +622,7 @@ async def parse_and_split_message(text):
         
         # Формат: "1 Арселор" або "1 на п'ятий Зарічний" або "1 в районі X" (в контексті current_city)
         rayon_match = re.match(r'^\d+\s+(?:на\s+(?:п\'ятий\s+)?|в\s+район[іу]\s+)?(\S+)\s*$', line, re.IGNORECASE)
-        if rayon_match and current_city:
+        if rayon_match and current_city and current_region:
             rayon = rayon_match.group(1).strip()
             # Якщо це район міста, виводимо місто
             msg = f"БПЛА {current_city} ({current_region})"
@@ -772,6 +772,23 @@ async def parse_and_split_message(text):
             messages.append(msg)
             continue
         
+        # Формат: "БпЛА між Петропавлівкою та Шахтарським" - беремо перше місто
+        bpla_mizh_match = re.match(r'^[🛵🛸\s]*БпЛА\s+між\s+(\S+)\s+та\s+', line, re.IGNORECASE)
+        if bpla_mizh_match:
+            city = bpla_mizh_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            # Використовуємо current_region або геокодер
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+            continue
+        
         # Формат: "Акустично шахед між Кременчуком та Горішніми Плавнями" - беремо перше місто
         akustychno_match = re.match(r'^[Аа]кустично\s+шахед\s+(?:між|біля|в районі)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
         if akustychno_match and current_region:
@@ -829,22 +846,36 @@ async def parse_and_split_message(text):
         
         # Формат ПС: "Nх БпЛА курсом на Місто" (з кількістю і current_region)
         bpla_qty_kursom_match = re.match(r'^[🛵🛸\s]*(\d+)\s*х?\s*БпЛА\s+курсом\s+на\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?\s*$', line, re.IGNORECASE)
-        if bpla_qty_kursom_match and current_region:
+        if bpla_qty_kursom_match:
             city = bpla_qty_kursom_match.group(2).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            msg = f"БПЛА {city} ({current_region})"
-            messages.append(msg)
+            # Використовуємо current_region або геокодер
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат ПС: "БпЛА курсом на Місто" (без кількості, з current_region)
         bpla_kursom_current_region_match = re.match(r'^[🛵🛸\s]*БпЛА\s+курсом\s+на\s+(.+?)(?:\s+з[іи]?\s+.+)?\.?\s*$', line, re.IGNORECASE)
-        if bpla_kursom_current_region_match and current_region:
+        if bpla_kursom_current_region_match:
             city = bpla_kursom_current_region_match.group(1).strip().rstrip('.')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
-            msg = f"БПЛА {city} ({current_region})"
-            messages.append(msg)
+            # Використовуємо current_region або геокодер
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат ПС: "🛵 БпЛА на сході Дніпропетровщини повз Шахтарське курсом на захід."
@@ -1221,8 +1252,8 @@ async def parse_and_split_message(text):
             
             # Видаляємо "в районі", "по межі", "у напрямку", "в напрямку" тощо на початку
             city = re.sub(r'^(\d*х?\s*)?(в районі|по межі|на межі|біля межі|[уів]\s+напрямку|на)\s+', '', city, flags=re.IGNORECASE).strip()
-            # Видаляємо "з моря", "з області", "зі сходу" тощо в кінці
-            city = re.sub(r'\s+з[іи]?\s+\S+$', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо "з моря", "з моря(~15х)", "з області", "зі сходу" тощо в кінці
+            city = re.sub(r'\s+з[іи]?\s+\S+(?:\([^)]*\))?$', '', city, flags=re.IGNORECASE).strip()
             # Видаляємо "➡️ курсом на ...", "курсом на ..." в кінці (якщо ще залишилось)
             city = re.sub(r'\s*➡️?\s*курсом\s+на\s+.+$', '', city, flags=re.IGNORECASE).strip()
             
