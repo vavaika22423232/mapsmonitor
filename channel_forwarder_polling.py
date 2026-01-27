@@ -430,22 +430,17 @@ async def parse_and_split_message(text):
         # Видаляємо emoji з назви міста
         city = re.sub(r'^[💥⚠️❗️\s]+', '', city).strip()
         if city:
-            # Перевіряємо чи це назва області (Чернігівщина, Харківщина тощо)
-            region_from_map = REGION_MAP.get(city)
-            if region_from_map:
-                # Це область - виводимо як "Область обл.\nвибухи."
-                if not region_from_map.endswith('.'):
-                    region_from_map = region_from_map + '.'
-                msg = f"{region_from_map}\nвибухи."
-                return [msg]
-            
-            # Використовуємо геокодер для визначення області
-            region = None
-            if GEOCODER_AVAILABLE:
-                region = geocoder_get_region(city)
-            if not region:
-                region = CITY_TO_REGION.get(city)
-            if region:
+            # Перевіряємо чи це назва області (Чернігівщина, Харківщина тощо) - пропускаємо
+            if REGION_MAP.get(city):
+                pass  # Пропускаємо вибухи в області без конкретного міста
+            else:
+                # Використовуємо геокодер для визначення області
+                region = None
+                if GEOCODER_AVAILABLE:
+                    region = geocoder_get_region(city)
+                if not region:
+                    region = CITY_TO_REGION.get(city)
+                if region:
                 if not region.endswith('.'):
                     region = region + '.'
                 msg = f"{city} ({region})\nвибухи."
