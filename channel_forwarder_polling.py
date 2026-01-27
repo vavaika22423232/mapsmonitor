@@ -799,6 +799,19 @@ async def parse_and_split_message(text):
             messages.append(msg)
             continue
         
+        # Формат ПС: "Харківщина: БПЛА невизначного типу біля Золочева" - Область: БПЛА ... біля Міста
+        ps_region_bilya_match = re.match(r'^[🛵🛸\s]*(\S+):\s*(?:БпЛА|БПЛА)\s+.+?\s+біля\s+(\S+)\.?\s*$', line, re.IGNORECASE)
+        if ps_region_bilya_match:
+            short_region = ps_region_bilya_match.group(1).strip()
+            city = ps_region_bilya_match.group(2).strip().rstrip('.')
+            region = REGION_MAP.get(short_region, None)
+            if region:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+            continue
+        
         # Формат ПС: "🛵 Чернігівщина: БпЛА в напрямку н.п. Березна, Ніжин, Борзна."
         # Область: БпЛА в напрямку н.п. Місто1, Місто2 - беремо тільки ПЕРШЕ місто
         ps_region_np_match = re.match(r'^[🛵🛸\s]*(\S+):\s*БпЛА\s+в\s+напрямку\s+(?:н\.п\.?\s*)?(.+?)(?:\s+з[іи]?\s+.+)?[\.;]?$', line, re.IGNORECASE)
