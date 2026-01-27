@@ -789,6 +789,36 @@ async def parse_and_split_message(text):
                 messages.append(msg)
             continue
         
+        # Формат: "Останній БПЛА кружляє південніше Павлограда" або "Останній БПЛА курсом на Харків"
+        ostanniy_bpla_match = re.match(r'^[Оо]станній\s+(?:БпЛА|БПЛА)\s+(?:кружляє\s+)?(?:південніше|північніше|західніше|східніше|курсом на|біля)\s+(\S+)\.?\s*$', line, re.IGNORECASE)
+        if ostanniy_bpla_match:
+            city = ostanniy_bpla_match.group(1).strip().rstrip('.')
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+            continue
+        
+        # Формат: "⚠️2х БпЛА на півдні від Павлограда (Дніпропетровщина)" - N БпЛА на півдні/півночі від Міста (Область)
+        bpla_vid_mista_match = re.match(r'^[⚠️❗️🔴\s]*(\d+)\s*х?\s*(?:БпЛА|БПЛА)\s+на\s+(?:півдні|півночі|сході|заході)\s+від\s+(\S+)\s*\((.+?)\)\.?\s*$', line, re.IGNORECASE)
+        if bpla_vid_mista_match:
+            city = bpla_vid_mista_match.group(2).strip()
+            short_region = bpla_vid_mista_match.group(3).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = REGION_MAP.get(short_region, None)
+            if not region:
+                region = short_region + ' обл.' if not short_region.endswith('обл.') else short_region
+            msg = f"БПЛА {city} ({region})"
+            messages.append(msg)
+            continue
+        
         # Формат: "Акустично шахед між Кременчуком та Горішніми Плавнями" - беремо перше місто
         akustychno_match = re.match(r'^[Аа]кустично\s+шахед\s+(?:між|біля|в районі)\s+(\S+)(?:\s+та\s+.+)?$', line, re.IGNORECASE)
         if akustychno_match and current_region:
