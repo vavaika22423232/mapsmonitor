@@ -431,9 +431,7 @@ async def parse_and_split_message(text):
         city = re.sub(r'^[💥⚠️❗️\s]+', '', city).strip()
         if city:
             # Перевіряємо чи це назва області (Чернігівщина, Харківщина тощо) - пропускаємо
-            if REGION_MAP.get(city):
-                pass  # Пропускаємо вибухи в області без конкретного міста
-            else:
+            if not REGION_MAP.get(city):
                 # Використовуємо геокодер для визначення області
                 region = None
                 if GEOCODER_AVAILABLE:
@@ -441,10 +439,10 @@ async def parse_and_split_message(text):
                 if not region:
                     region = CITY_TO_REGION.get(city)
                 if region:
-                if not region.endswith('.'):
-                    region = region + '.'
-                msg = f"{city} ({region})\nвибухи."
-                return [msg]
+                    if not region.endswith('.'):
+                        region = region + '.'
+                    msg = f"{city} ({region})\nвибухи."
+                    return [msg]
     
     # Обробка повідомлень про високошвидкісні цілі (ракети)
     # Формат: "🚀 Харків (Харківська обл.) Загроза застосування високошвидкісних цілей..."
