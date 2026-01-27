@@ -1266,6 +1266,11 @@ async def parse_and_split_message(text):
             city = re.sub(r'[\*]+', '', city).strip()
             # Видаляємо "бпла" з назви міста
             city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо "(невст.тип)" або "(Невст.тип)" або "(невизначеного типу)"
+            city = re.sub(r'\([Нн]евс?т?\.?\s*тип\)', '', city, flags=re.IGNORECASE).strip()
+            city = re.sub(r'\([Нн]евизначеного\s+типу\)', '', city, flags=re.IGNORECASE).strip()
+            # Видаляємо "на " на початку (після видалення невст.тип)
+            city = re.sub(r'^на\s+', '', city, flags=re.IGNORECASE).strip()
             # Видаляємо кількість на початку (7х, 3х тощо)
             city = re.sub(r'^\d+\s*х?\s*', '', city).strip()
             # Видаляємо повторне "бпла" після кількості
