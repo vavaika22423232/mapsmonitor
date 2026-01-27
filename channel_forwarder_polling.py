@@ -524,7 +524,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -540,7 +540,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -556,7 +556,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -572,7 +572,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -588,7 +588,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -616,7 +616,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -785,7 +785,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -801,7 +801,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -900,7 +900,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -917,7 +917,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -944,7 +944,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -958,7 +958,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -996,7 +996,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1074,7 +1074,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"Ракета {city} ({region})"
                 messages.append(msg)
@@ -1102,7 +1102,7 @@ async def parse_and_split_message(text):
             city = city[0].upper() + city[1:] if city else city
             region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1158,7 +1158,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1394,7 +1394,7 @@ async def parse_and_split_message(text):
             city = await split_cities(shahedy_na_match.group(2).strip().rstrip('!'))
             region = current_region
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1430,7 +1430,7 @@ async def parse_and_split_message(text):
             if not region:
                 region = CITY_TO_REGION.get(city, None)
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 message = f"БПЛА \"{bpla_type}\" {city} ({region})"
                 messages.append(message)
@@ -1522,7 +1522,7 @@ async def parse_and_split_message(text):
             else:
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
             
             if region:
                 msg = f"БПЛА {city} ({region})"
@@ -1536,7 +1536,7 @@ async def parse_and_split_message(text):
             # Використовуємо current_region або геокодинг
             region = current_region
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1548,7 +1548,7 @@ async def parse_and_split_message(text):
             city = await split_cities(manevruyut_match.group(3).strip())
             region = current_region
             if not region:
-                region = await get_region_by_city(city)
+                region = await get_region_by_city(city, current_region)
             if region:
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
@@ -1576,7 +1576,7 @@ async def parse_and_split_message(text):
                 city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
                 if region:
                     msg = f"БПЛА {city} ({region})"
                     messages.append(msg)
@@ -1588,7 +1588,7 @@ async def parse_and_split_message(text):
                 city = await split_cities(match.group(3).strip())
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
                 if region:
                     msg = f"БПЛА {city} ({region})"
                     messages.append(msg)
@@ -1603,7 +1603,7 @@ async def parse_and_split_message(text):
                 city = await split_cities(city)
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
                 if region:
                     msg = f"БПЛА {city} ({region})"
                     messages.append(msg)
@@ -1618,7 +1618,7 @@ async def parse_and_split_message(text):
                 city = await split_cities(city.strip())
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
                 if city and region:
                     msg = f"БПЛА {city} ({region})"
                     messages.append(msg)
@@ -1633,7 +1633,7 @@ async def parse_and_split_message(text):
                 city = await split_cities(city.strip())
                 region = current_region
                 if not region:
-                    region = await get_region_by_city(city)
+                    region = await get_region_by_city(city, current_region)
                 if city and region:
                     msg = f"БПЛА {city} ({region})"
                     messages.append(msg)
