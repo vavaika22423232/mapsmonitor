@@ -35,7 +35,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa,raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,veselyy_pivden,sectorv666,vanek_nikolaev').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa,raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,veselyy_pivden,sectorv666,vanek_nikolaev,monitor1654').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Мапінг каналів до областей (для регіональних каналів)
@@ -233,10 +233,32 @@ CITY_TO_REGION = {
     # Одеська область - курорти та міста
     'Затока': 'Одеська обл.',
     'Затоки': 'Одеська обл.',
+    'Затоку': 'Одеська обл.',
     'Чорноморськ': 'Одеська обл.',
     'Южне': 'Одеська обл.',
     'Южного': 'Одеська обл.',
     'Білгород-Дністровський': 'Одеська обл.',
+    'Південне': 'Одеська обл.',
+    'Лиманка': 'Одеська обл.',
+    'Аркадія': 'Одеська обл.',
+    'Великодолинське': 'Одеська обл.',
+    'Курортне': 'Одеська обл.',
+    'Грибівка': 'Одеська обл.',
+    'Санжійка': 'Одеська обл.',
+    'Кароліно-Бугаз': 'Одеська обл.',
+    'Сергіївка': 'Одеська обл.',
+    'Приморське': 'Одеська обл.',
+    # Харківська область - міста та села
+    'Барвінкове': 'Харківська обл.',
+    'Самійлівка': 'Харківська обл.',
+    'Самійлівку': 'Харківська обл.',
+    'Козача Лопань': 'Харківська обл.',
+    'Козачої Лопані': 'Харківська обл.',
+    'Вовчанськ': 'Харківська обл.',
+    'Тернова': 'Харківська обл.',
+    'Краснопавлівка': 'Харківська обл.',
+    'Краснопавлівку': 'Харківська обл.',
+    'Савинці': 'Харківська обл.',
     # Спеціальні локації
     'Чорне море': 'Одеська обл.',
     'Чорному морі': 'Одеська обл.',
@@ -291,8 +313,11 @@ async def get_region_by_city(city_name, hint_region=None):
                         # Шукаємо область
                         region = address.get('state', '')
                         if region:
+                            # Пропускаємо АР Крим - залишаємо як є
+                            if 'Крим' in region:
+                                region = 'АР Крим'
                             # Приводимо до формату "Область обл."
-                            if 'область' in region.lower():
+                            elif 'область' in region.lower():
                                 region = region.replace('область', 'обл.').replace('Область', 'обл.')
                             elif not region.endswith('обл.'):
                                 region = region + ' обл.'
@@ -437,6 +462,81 @@ async def parse_and_split_message(text, channel_name=None):
         msg = f"КАБ {location} ({region})"
         return [msg]
     
+    # Формат: "Авіація заходить на пуски КАБ на Місто" або "Авіація заходить на повторні пуски КАБ на Місто"
+    aviatsiya_kab_match = re.search(r'[Аа]віація\s+заходить\s+на\s+(?:повторні\s+)?пуски\s+КАБ\s+на\s+(.+?)[⚠️❗️!]*$', text, re.IGNORECASE | re.MULTILINE)
+    if aviatsiya_kab_match:
+        cities_part = aviatsiya_kab_match.group(1).strip()
+        results = []
+        # Розбиваємо по / якщо є декілька міст
+        cities = re.split(r'[/,]', cities_part)
+        for city in cities:
+            city = city.strip().rstrip('⚠️❗️!')
+            if city:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                region = CITY_TO_REGION.get(city, None)
+                if not region and GEOCODER_AVAILABLE:
+                    region = geocoder_get_region(city)
+                if region:
+                    if not region.endswith('.'):
+                        region = region + '.'
+                    msg = f"КАБ {city} ({region})"
+                    if msg not in results:
+                        results.append(msg)
+        if results:
+            return results
+    
+    # Формат: "Авіація заходить на пуски КАБ в напрямку Місто/Область"
+    aviatsiya_kab_napryamku_match = re.search(r'[Аа]віація\s+заходить\s+на\s+пуски\s+КАБ\s+в\s+напрямку\s+(.+?)[⚠️❗️!]*$', text, re.IGNORECASE | re.MULTILINE)
+    if aviatsiya_kab_napryamku_match:
+        direction = aviatsiya_kab_napryamku_match.group(1).strip()
+        results = []
+        # Розбиваємо по / якщо є декілька напрямків
+        parts = re.split(r'[/]', direction)
+        for part in parts:
+            part = part.strip().rstrip('⚠️❗️!')
+            # Пропускаємо якщо це область (Сумської області)
+            if re.search(r'області$', part, re.IGNORECASE):
+                continue
+            if part:
+                city = fix_city_case(part)
+                city = city[0].upper() + city[1:] if city else city
+                region = CITY_TO_REGION.get(city, None)
+                if not region and GEOCODER_AVAILABLE:
+                    region = geocoder_get_region(city)
+                if region:
+                    if not region.endswith('.'):
+                        region = region + '.'
+                    msg = f"КАБ {city} ({region})"
+                    if msg not in results:
+                        results.append(msg)
+        if results:
+            return results
+    
+    # Формат: "КАБ на Місто/Місто2" (просте)
+    kab_na_simple_match = re.search(r'^КАБ\s+на\s+(.+?)[⚠️❗️!]*$', text, re.IGNORECASE | re.MULTILINE)
+    if kab_na_simple_match:
+        cities_part = kab_na_simple_match.group(1).strip()
+        results = []
+        # Розбиваємо по / якщо є декілька міст
+        cities = re.split(r'[/,]', cities_part)
+        for city in cities:
+            city = city.strip().rstrip('⚠️❗️!')
+            if city:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                region = CITY_TO_REGION.get(city, None)
+                if not region and GEOCODER_AVAILABLE:
+                    region = geocoder_get_region(city)
+                if region:
+                    if not region.endswith('.'):
+                        region = region + '.'
+                    msg = f"КАБ {city} ({region})"
+                    if msg not in results:
+                        results.append(msg)
+        if results:
+            return results
+    
     # Обробка повідомлень про вибухи окремо
     # Формат: "⚠️ Місто (Область) ЗМІ повідомляють про вибухи..." або "⚠️ Місто (Область)\nЗМІ повідомляють..."
     vybukhy_match = re.search(r'^[⚠️❗️💥\s]*(.+?)\s*\((.+?обл\.?)\)[\s\n]*(?:ЗМІ\s+)?повідомляють\s+про\s+вибухи', text, re.IGNORECASE | re.MULTILINE)
@@ -515,6 +615,26 @@ async def parse_and_split_message(text, channel_name=None):
         # НЕ пропускаємо "будьте обережні" - воно може бути частиною повідомлення про вибухи
         if re.search(r'повітряна\s+тривога|відбій\s+тривоги|прямуйте\s+в\s+укриття|перейдіть\s+в\s+укриття|загроза\s+обстрілу', line, re.IGNORECASE):
             continue
+        
+        # Пропускаємо інформаційні повідомлення без конкретних міст
+        if re.search(r'На даний час \d+ БПЛА|Активність тактичної авіації|Загроза для .+ області|Впав💥|^Впав$', line, re.IGNORECASE):
+            continue
+        
+        # Формат: "▪️1 на Барвінкове❗️" або "▪️N на Місто❗️" - БПЛА з маркером ▪️
+        marker_bpla_match = re.match(r'^[▪️•\s]*(\d+)\s+на\s+(.+?)[❗️⚠️!]*$', line, re.IGNORECASE)
+        if marker_bpla_match:
+            city = marker_bpla_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city, current_region)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
         
         # Формат заголовка: "✈️Дніпропетровщина:" або "🛵Харківщина:" або просто "Дніпропетровщина:" - область з/без emoji і двокрапкою
         emoji_region_header_match = re.match(r'^[✈️🛵🛸⚠️\s]*(\S+):\s*$', line, re.IGNORECASE)
@@ -828,7 +948,9 @@ async def parse_and_split_message(text, channel_name=None):
                 city = location
                 city = fix_city_case(city)
                 city = city[0].upper() + city[1:] if city else city
-                region = CITY_TO_REGION.get(city, None)
+                region = current_region
+                if not region:
+                    region = CITY_TO_REGION.get(city, None)
                 if not region:
                     region = await get_region_by_city(city, current_region)
             if region:
@@ -1656,7 +1778,8 @@ async def parse_and_split_message(text, channel_name=None):
             city = re.sub(r'^(бпла|БпЛА|БПЛА)\s*', '', city, flags=re.IGNORECASE).strip()
             
             # ВАЖЛИВО: Якщо є "курсом на X" - беремо X як кінцевий пункт
-            kursom_match = re.search(r'курсом\s+на\s+(.+)$', city, re.IGNORECASE)
+            # Видаляємо "виліз", "вилетів", "вийшов" перед "курсом"
+            kursom_match = re.search(r'(?:виліз|вилетів|вийшов)?\s*курсом\s+на\s+(.+)$', city, re.IGNORECASE)
             if kursom_match:
                 city = kursom_match.group(1).strip()
             
