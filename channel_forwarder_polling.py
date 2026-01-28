@@ -38,6 +38,11 @@ STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa,raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,veselyy_pivden,sectorv666,vanek_nikolaev').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
+# Мапінг каналів до областей (для регіональних каналів)
+CHANNEL_TO_REGION = {
+    'odessaveter': 'Одеська обл.',
+}
+
 # Інтервал опитування (секунди)
 POLL_INTERVAL = int(os.getenv('POLL_INTERVAL', '30'))
 
@@ -225,6 +230,13 @@ CITY_TO_REGION = {
     'Бориспіль': 'Київська обл.',
     'ТЕЦ-5': 'Київська обл.',
     'ТЕЦ-6': 'Київська обл.',
+    # Одеська область - курорти та міста
+    'Затока': 'Одеська обл.',
+    'Затоки': 'Одеська обл.',
+    'Чорноморськ': 'Одеська обл.',
+    'Южне': 'Одеська обл.',
+    'Южного': 'Одеська обл.',
+    'Білгород-Дністровський': 'Одеська обл.',
     # Спеціальні локації
     'Чорне море': 'Одеська обл.',
     'Чорному морі': 'Одеська обл.',
@@ -392,12 +404,18 @@ def fix_city_case(city):
     return city
 
 
-async def parse_and_split_message(text):
+async def parse_and_split_message(text, channel_name=None):
     """
     Розбиває повідомлення на окремі повідомлення по населених пунктах
+    channel_name - назва каналу для визначення регіону
     """
     if not text:
         return []
+    
+    # Визначаємо default region з каналу
+    channel_default_region = None
+    if channel_name:
+        channel_default_region = CHANNEL_TO_REGION.get(channel_name, None)
     
     # Спочатку очищаємо текст
     text = clean_text(text)
@@ -475,7 +493,8 @@ async def parse_and_split_message(text):
     
     messages = []
     lines = text.strip().split('\n')
-    current_region = None
+    # Ініціалізуємо current_region з каналу (якщо це регіональний канал)
+    current_region = channel_default_region
     current_city = None  # Для контексту районів міста (напр. "Кривий Ріг:")
     
     # Зберігаємо наступний рядок як опис загрози
@@ -2048,8 +2067,8 @@ async def check_and_forward():
                     # Нове повідомлення!
                     logger.info(f"🆕 Нове повідомлення в @{channel}: ID {message.id}")
                     
-                    # Розбиваємо повідомлення на окремі
-                    split_messages = await parse_and_split_message(message.text)
+                    # Розбиваємо повідомлення на окремі (передаємо channel для регіонального hint)
+                    split_messages = await parse_and_split_message(message.text, channel)
                     
                     # Пропускаємо якщо немає валідних повідомлень
                     if not split_messages or (len(split_messages) == 1 and not split_messages[0]):
