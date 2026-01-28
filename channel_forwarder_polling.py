@@ -35,7 +35,7 @@ API_ID = os.getenv('TELEGRAM_API_ID')
 API_HASH = os.getenv('TELEGRAM_API_HASH')
 STRING_SESSION = os.getenv('TELEGRAM_SESSION')
 
-SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,radarzagrozi,povitryanatrivogaaa,raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,veselyy_pivden,sectorv666,vanek_nikolaev,monitor1654').split(',')
+SOURCE_CHANNELS = os.getenv('SOURCE_CHANNELS', 'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,povitryanatrivogaaa,raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,veselyy_pivden,sectorv666,vanek_nikolaev,monitor1654').split(',')
 TARGET_CHANNEL = os.getenv('TARGET_CHANNEL', 'mapstransler')
 
 # Мапінг каналів до областей (для регіональних каналів)
@@ -2208,11 +2208,19 @@ async def parse_and_split_message(text, channel_name=None):
             
             msg = f"{threat_type} {city_part} ({region})"
         
+        # Пропускаємо якщо місто занадто коротке (менше 3 символів) - це сміття типу "пов", "на" тощо
+        city_check = re.match(r'^(БПЛА|Ракета|КАБ)\s+(.+?)\s*\(', msg)
+        if city_check:
+            city_name = city_check.group(2).strip()
+            if len(city_name) < 3:
+                continue
+        
         # Пропускаємо якщо повідомлення містить напрямки замість міст
-        skip_directions = ['західний', 'східний', 'північний', 'південний', 'захід', 'схід', 'північ', 'південь']
+        skip_directions = ['західний', 'східний', 'північний', 'південний', 'захід', 'схід', 'північ', 'південь',
+                          'північно-західний', 'північно-східний', 'південно-західний', 'південно-східний']
         should_skip = False
         for direction in skip_directions:
-            if f"БПЛА {direction.capitalize()}" in msg or f"БПЛА {direction}" in msg:
+            if f"БПЛА {direction.capitalize()}" in msg or f"БПЛА {direction}" in msg or f"БПЛА {direction.upper()}" in msg:
                 should_skip = True
                 break
         if should_skip:
@@ -2220,7 +2228,7 @@ async def parse_and_split_message(text, channel_name=None):
         
         # Пропускаємо аббревіатури, російські міста та технічні терміни
         skip_words = ['чс', 'сау', 'зсу', 'ппо', 'ахтарск', 'таганрог', 'ростов', 'бєлгород', 'курськ',
-                      'мінус', 'плюс', 'збито', 'впав', 'знищено', 'ліквідовано']
+                      'мінус', 'плюс', 'збито', 'впав', 'знищено', 'ліквідовано', 'пов', 'повз', 'курс', 'курсом']
         for word in skip_words:
             if f"БПЛА {word.capitalize()}" in msg or f"БПЛА {word.upper()}" in msg or f"БПЛА {word}" in msg:
                 should_skip = True
