@@ -416,7 +416,7 @@ async def parse_and_split_message(text):
         region = kab_match.group(2).strip()
         if not region.endswith('.'):
             region = region + '.'
-        msg = f"{location} ({region})\nЗагроза застосування КАБів."
+        msg = f"КАБ {location} ({region})"
         return [msg]
     
     # Обробка повідомлень про вибухи окремо
@@ -573,6 +573,45 @@ async def parse_and_split_message(text):
                 msg = f"БПЛА {city} ({region})"
                 messages.append(msg)
                 continue
+        
+        # Формат: "1 балалайка на Великодолинське (Одеська обл)" або "1 балалайка підходить до Чорноморська (Одеська обл)"
+        balalayka_na_match = re.match(r'^[+\s]*\d+\s+(?:нова?\s+)?балалайк[аи]?\s+(?:на\s+(?:с\.\s+)?|підходить\s+до\s+)(.+?)\s*\(([^)]+)\)', line, re.IGNORECASE)
+        if balalayka_na_match:
+            city = balalayka_na_match.group(1).strip()
+            region_hint = balalayka_na_match.group(2).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            # Перевіряємо чи region_hint - це область чи місто
+            if 'обл' in region_hint.lower():
+                region = region_hint
+                if not region.endswith('.'):
+                    region = region.replace('обл', 'обл.')
+            else:
+                region = CITY_TO_REGION.get(region_hint, None)
+                if not region:
+                    region = await get_region_by_city(region_hint, current_region)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "3 балалайки в секторі Великодолинське" (без області - використовуємо current_region або геокодер)
+        balalayka_sektor_match = re.match(r'^[+\s]*\d+\s+(?:нова?\s+)?балалайк[аи]?\s+(?:в\s+секторі|біля|на)\s+(.+?)$', line, re.IGNORECASE)
+        if balalayka_sektor_match:
+            city = balalayka_sektor_match.group(1).strip().rstrip('.,;!')
+            # Пропускаємо "в морі" - немає конкретного міста
+            if city.lower() not in ['морі', 'море']:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                region = current_region
+                if not region:
+                    region = CITY_TO_REGION.get(city, None)
+                if not region:
+                    region = await get_region_by_city(city, current_region)
+                if region:
+                    msg = f"БПЛА {city} ({region})"
+                    messages.append(msg)
+                    continue
         
         # Формат: "‼️ Кривий Ріг - 7 шахедів заходять на місто" - місто з тире
         city_dash_match = re.match(r'^[⚠️‼️\s]*(.+?)\s*[-–—]\s*\d*\s*шахед', line, re.IGNORECASE)
