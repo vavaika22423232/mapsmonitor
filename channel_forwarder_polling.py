@@ -215,7 +215,9 @@ CITY_TO_REGION = {
     'Чернігів': 'Чернігівська обл.',
     'Сновськ': 'Чернігівська обл.',
     'Сосниця': 'Чернігівська обл.',
+    'Корюківка': 'Чернігівська обл.',
     'Черкаси': 'Черкаська обл.',
+    'Чигирин': 'Черкаська обл.',
     'Житомир': 'Житомирська обл.',
     'Суми': 'Сумська обл.',
     'Хмельницький': 'Хмельницька обл.',
@@ -692,6 +694,40 @@ async def parse_and_split_message(text, channel_name=None):
                     entry = entry.strip()
                     if not entry:
                         continue
+                    
+                    # Формат: "2 кружляють біля Корюківки"
+                    kruzhlyayut_match = re.match(r'^(\d+)\s+кружляють\s+біля\s+(\S+)$', entry, re.IGNORECASE)
+                    if kruzhlyayut_match:
+                        city = kruzhlyayut_match.group(2).strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
+                    # Формат: "3 в районі Синельникового"
+                    v_rayoni_entry_match = re.match(r'^(\d+)\s+в\s+район[іу]?\s+(\S+)$', entry, re.IGNORECASE)
+                    if v_rayoni_entry_match:
+                        city = v_rayoni_entry_match.group(2).strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
+                    # Формат: "2 на Чигирин з Полтавщини та Кіровоградщини"
+                    na_city_z_match = re.match(r'^(\d+)\s+на\s+(\S+)(?:\s+з\s+.+)?$', entry, re.IGNORECASE)
+                    if na_city_z_match:
+                        city = na_city_z_match.group(2).strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
                     # Формати: "2 в районі Борисполя", "1 на Ржищів з півночі", "2 кружляють біля Славгорода"
                     # "3 Бориспіль - Українка", "2 Славгород", "1 біля Сосниці", "1 повз Кириківку", "1 південь Павлограда"
                     city_match = re.match(r'^\d+\s+(?:в\s+район[іу]\s+|на\s+|біля\s+|кружляють\s+біля\s+|повз\s+|з\s+\S+\s+на\s+|(?:південь|північ|схід|захід)\s+)?(\S+?)(?:\s+в\s+бік\s+\S+|\s*[-–]\s*\S+)?(?:\s+(?:з[іи]?\s+|із\s+)?\S+)?$', entry, re.IGNORECASE)
