@@ -516,6 +516,19 @@ async def parse_and_split_message(text):
             region = REGION_MAP.get(short_region, None)
             if region:
                 current_region = region
+                # Спочатку перевіряємо формат "1 БпЛА від Міста повз Місто на Область"
+                bpla_vid_povz_match = re.match(r'^\d+\s+(?:БпЛА|БПЛА)\s+від\s+(\S+)\s+повз\s+(\S+)', cities_part, re.IGNORECASE)
+                if bpla_vid_povz_match:
+                    # Беремо обидва міста
+                    for city in [bpla_vid_povz_match.group(1), bpla_vid_povz_match.group(2)]:
+                        city = city.strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                    continue
+                
                 # Парсимо список міст, розділених комами
                 city_entries = re.split(r',\s*', cities_part)
                 for entry in city_entries:
@@ -532,6 +545,28 @@ async def parse_and_split_message(text):
                         msg = f"БПЛА {city} ({region})"
                         if msg not in messages:
                             messages.append(msg)
+                continue
+        
+        # Формат: "2 Шахеда з Сумщини на Чернігівщину, курс Понорниця"
+        shahedy_kurs_match = re.match(r'^\d+\s+[Шш]ахед[аи]?\s+з\s+\S+\s+на\s+(\S+),?\s*курс\s+(\S+)', line, re.IGNORECASE)
+        if shahedy_kurs_match:
+            target_region_short = shahedy_kurs_match.group(1).strip()
+            city = shahedy_kurs_match.group(2).strip().rstrip('.,;!')
+            # Визначаємо область з target_region
+            region = REGION_MAP.get(target_region_short, None)
+            if not region:
+                # Пробуємо геокодер для міста
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+                region = CITY_TO_REGION.get(city, None)
+                if not region:
+                    region = await get_region_by_city(city, current_region)
+            else:
+                city = fix_city_case(city)
+                city = city[0].upper() + city[1:] if city else city
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
                 continue
         
         # Формат заголовка міста: "⚠️ Кривий Ріг:" або "Кривий Ріг:" - місто з двокрапкою (для районів міста)
