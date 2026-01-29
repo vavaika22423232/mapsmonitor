@@ -222,10 +222,12 @@ CITY_TO_REGION = {
     'Черкаси': 'Черкаська обл.',
     'Чигирин': 'Черкаська обл.',
     'Канів': 'Черкаська обл.',
+    'Золотоноша': 'Черкаська обл.',
     'Житомир': 'Житомирська обл.',
     'Суми': 'Сумська обл.',
     'Шостка': 'Сумська обл.',
     'Хмельницький': 'Хмельницька обл.',
+    'Стара Синява': 'Хмельницька обл.',
     'Рівне': 'Рівненська обл.',
     'Івано-Франківськ': 'Івано-Франківська обл.',
     'Тернопіль': 'Тернопільська обл.',
@@ -280,10 +282,12 @@ CITY_TO_REGION = {
     'Павлоград': 'Дніпропетровська обл.',
     'Синельникове': 'Дніпропетровська обл.',
     'Славгород': 'Дніпропетровська обл.',
+    'Самар': 'Дніпропетровська обл.',
+    'Радушне': 'Дніпропетровська обл.',
     # Полтавська область
     'Глобине': 'Полтавська обл.',
-    # Дніпропетровська область - додаткові міста
-    'Радушне': 'Дніпропетровська обл.',
+    # Харківська область - додаткові
+    'Богодухів': 'Харківська обл.',
     # Спеціальні локації
     'Чорне море': 'Одеська обл.',
     'Чорному морі': 'Одеська обл.',
@@ -725,10 +729,39 @@ async def parse_and_split_message(text, channel_name=None):
                             messages.append(msg)
                         continue
                     
-                    # Формат: "2 на Чигирин з Полтавщини та Кіровоградщини" або "1 на Шостку з Чернігівщини"
-                    na_city_z_match = re.match(r'^(\d+)\s+на\s+(\S+)(?:\s+з\s+.+)?$', entry, re.IGNORECASE)
+                    # Формат: "2 на Чигирин з Полтавщини" або "БпЛА курсом на Стару Синяву з Вінниччини"
+                    # Беремо до 2 слів для міста (для "Стара Синява", "Кривий Ріг" тощо)
+                    na_city_z_match = re.match(r'^(?:\d+\s*х?\s*)?(?:БпЛА\s+)?(?:курсом\s+)?на\s+(\S+(?:\s+\S+)?)\s+з\s+', entry, re.IGNORECASE)
                     if na_city_z_match:
-                        city = na_city_z_match.group(2).strip().rstrip('.,;')
+                        city = na_city_z_match.group(1).strip().rstrip('.,;')
+                        # Перевіряємо чи це місто з 2 слів в словнику
+                        city_fixed = fix_city_case(city)
+                        if city_fixed not in CITY_TO_REGION and ' ' in city:
+                            # Якщо немає в словнику і є 2 слова - беремо тільки перше
+                            city = city.split()[0]
+                        else:
+                            city = city_fixed
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
+                    # Формат: "БпЛА курсом на Самар" або "БпЛА маневрує південніше Золотоноші"
+                    bpla_kursom_match = re.match(r'^(?:БпЛА|БПЛА)\s+(?:курсом\s+на|маневрує\s+\S+)\s+(\S+(?:\s+\S+)?)$', entry, re.IGNORECASE)
+                    if bpla_kursom_match:
+                        city = bpla_kursom_match.group(1).strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
+                    # Формат: "2 на Чигирин" (без "з") - одне слово
+                    na_city_simple_match = re.match(r'^(\d+)\s+на\s+(\S+)$', entry, re.IGNORECASE)
+                    if na_city_simple_match:
+                        city = na_city_simple_match.group(2).strip().rstrip('.,;')
                         city = fix_city_case(city)
                         city = city[0].upper() + city[1:] if city else city
                         msg = f"БПЛА {city} ({region})"
