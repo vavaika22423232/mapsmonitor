@@ -2369,6 +2369,11 @@ async def parse_and_split_message(text, channel_name=None):
         city_check = re.match(r'^(БПЛА|Ракета|КАБ)\s+(.+?)\s*\(', msg)
         if city_check:
             city_name = city_check.group(2).strip()
+            
+            # Пропускаємо якщо назва міста містить квадратні дужки, зайві круглі дужки або інші спецсимволи
+            if '[' in city_name or ']' in city_name or '(' in city_name or ')' in city_name:
+                continue
+            
             if len(city_name) < 3:
                 continue
             # Пропускаємо якщо "місто" насправді є назвою області
