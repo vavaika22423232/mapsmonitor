@@ -1,16 +1,18 @@
 """
-OpenCage Geocoder with MAXIMUM economy mode
+OpenCage Geocoder with MAXIMUM economy mode + Groq AI fallback
 - Single API call per unique city
 - Persistent JSON cache
 - Negative cache for not-found cities
 - Returns oblast (region) name for Ukrainian cities
+- Groq LLM as smart fallback when OpenCage fails
 """
 
 import json
 import os
 import requests
 
-OPENCAGE_API_KEY = os.environ.get('OPENCAGE_API_KEY', 'c30fbe219d5d49ada3657da3326ca9b7')
+OPENCAGE_API_KEY = os.environ.get('OPENCAGE_API_KEY', '')
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 
 # Use /data for persistent storage on Render, fallback to local dir
 def _get_cache_path(filename):
@@ -97,6 +99,9 @@ def _normalize_city_name(city: str) -> str:
         'березну': 'Березна',
         'васильківку': 'Васильківка',
         'дмитрівку': 'Дмитрівка',
+        'просяну': 'Просяна',
+        'суданівку': 'Суданівка',
+        'дослідне': 'Дослідне',
     }
     
     if city_lower in known_transforms:
@@ -332,9 +337,84 @@ def _call_api(city: str, region: str = None) -> dict:
         return None
 
 
+def _call_groq_api(city: str, hint_region: str = None) -> str:
+    """
+    Use Groq LLM to determine oblast for a Ukrainian city.
+    This is a smart fallback when OpenCage fails.
+    Returns region in format "Область обл." or None.
+    """
+    if not GROQ_API_KEY:
+        return None
+    
+    _stats['api_calls'] += 1
+    
+    # Normalize city name first
+    city_normalized = _normalize_city_name(city)
+    
+    # Build context
+    context = f"місто/село: {city_normalized}"
+    if hint_region:
+        context += f", контекст: {hint_region}"
+    
+    prompt = f"""Визнач область України для населеного пункту.
+
+{context}
+
+Відповідай ТІЛЬКИ назвою області у форматі "Назва обл." (наприклад: "Дніпропетровська обл.", "Харківська обл.").
+Якщо не знаєш або не впевнений - відповідай "невідомо".
+Відповідь:"""
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 50,
+                "temperature": 0
+            },
+            timeout=5
+        )
+        
+        if not response.ok:
+            print(f"[GROQ] API error: {response.status_code}", flush=True)
+            return None
+        
+        data = response.json()
+        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Validate answer
+        if not answer or 'невідомо' in answer.lower() or len(answer) > 30:
+            print(f"[GROQ] No valid answer for '{city}': {answer}", flush=True)
+            return None
+        
+        # Ensure proper format
+        if not answer.endswith('обл.'):
+            if 'обл' in answer.lower():
+                answer = answer.replace('область', 'обл.').replace('обл', 'обл.')
+            else:
+                answer = answer + ' обл.'
+        
+        # Clean up
+        answer = answer.strip()
+        if answer.endswith(' обл. обл.'):
+            answer = answer.replace(' обл. обл.', ' обл.')
+        
+        print(f"[GROQ] Found: {city} -> {answer}", flush=True)
+        return answer
+        
+    except Exception as e:
+        print(f"[GROQ] Exception: {e}", flush=True)
+        return None
+
+
 def get_region(city: str, hint_region: str = None) -> str:
     """
-    Get oblast (region) for a city. Uses cache first, only calls API if needed.
+    Get oblast (region) for a city. Uses cache first, then OpenCage, then Groq AI.
     
     Args:
         city: City name (can be in any grammatical case)
@@ -362,18 +442,27 @@ def get_region(city: str, hint_region: str = None) -> str:
         _stats['hits'] += 1
         return None
     
-    # Call API
+    # Try OpenCage API first
     _stats['misses'] += 1
     result = _call_api(city, hint_region)
     
-    if result:
+    if result and result.get('region'):
         _cache[cache_key] = result
         _save_cache()
         return result.get('region')
-    else:
-        _negative_cache.add(cache_key)
-        _save_negative_cache()
-        return None
+    
+    # Fallback to Groq AI
+    groq_region = _call_groq_api(city, hint_region)
+    if groq_region:
+        # Cache the result (without coords since Groq doesn't provide them)
+        _cache[cache_key] = {'coords': None, 'region': groq_region}
+        _save_cache()
+        return groq_region
+    
+    # Nothing found - add to negative cache
+    _negative_cache.add(cache_key)
+    _save_negative_cache()
+    return None
 
 
 def geocode(city: str, region: str = None) -> tuple:
