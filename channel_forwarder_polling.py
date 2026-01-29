@@ -728,6 +728,30 @@ async def parse_and_split_message(text, channel_name=None):
                             messages.append(msg)
                         continue
                     
+                    # Формат: "1х БпЛА у Ковельському районі" - витягуємо назву міста з прикметника району
+                    u_rayoni_match = re.match(r'^(\d+)\s*х?\s*(?:БпЛА|БПЛА)\s+[уів]\s+(\S+)(?:ому|ому|ій)\s+район[іу]', entry, re.IGNORECASE)
+                    if u_rayoni_match:
+                        rayon_adj = u_rayoni_match.group(2).strip()
+                        # Перетворюємо прикметник району на назву міста (Ковельськ -> Ковель)
+                        city = rayon_adj.rstrip('ськ').rstrip('цьк') if rayon_adj.endswith(('ськ', 'цьк')) else rayon_adj
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
+                    # Формат: "1х БпЛА повз Черкаси" - повз місто
+                    povz_match = re.match(r'^(\d+)\s*х?\s*(?:БпЛА|БПЛА)\s+повз\s+(\S+)', entry, re.IGNORECASE)
+                    if povz_match:
+                        city = povz_match.group(2).strip().rstrip('.,;')
+                        city = fix_city_case(city)
+                        city = city[0].upper() + city[1:] if city else city
+                        msg = f"БПЛА {city} ({region})"
+                        if msg not in messages:
+                            messages.append(msg)
+                        continue
+                    
                     # Формати: "2 в районі Борисполя", "1 на Ржищів з півночі", "2 кружляють біля Славгорода"
                     # "3 Бориспіль - Українка", "2 Славгород", "1 біля Сосниці", "1 повз Кириківку", "1 південь Павлограда"
                     city_match = re.match(r'^\d+\s+(?:в\s+район[іу]\s+|на\s+|біля\s+|кружляють\s+біля\s+|повз\s+|з\s+\S+\s+на\s+|(?:південь|північ|схід|захід)\s+)?(\S+?)(?:\s+в\s+бік\s+\S+|\s*[-–]\s*\S+)?(?:\s+(?:з[іи]?\s+|із\s+)?\S+)?$', entry, re.IGNORECASE)
@@ -1203,6 +1227,23 @@ async def parse_and_split_message(text, channel_name=None):
             city = city[0].upper() + city[1:] if city else city
             msg = f"БПЛА {city} ({current_region})"
             messages.append(msg)
+            continue
+        
+        # Формат: "❗️ Кривий Ріг — 1х БпЛА." - місто з тире і БПЛА
+        city_tire_bpla_match = re.match(r'^[❗️⚠️\s]*(.+?)\s*[—–-]\s*\d+\s*х?\s*(?:БпЛА|БПЛА)\.?$', line, re.IGNORECASE)
+        if city_tire_bpla_match:
+            city = city_tire_bpla_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            # Спробуємо знайти область
+            region = CITY_TO_REGION.get(city, None)
+            if not region and current_region:
+                region = current_region
+            if not region:
+                region = await get_region_by_city(city, current_region)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
             continue
         
         # Формат зі стрілкою: "→Павлоград/р-н (кружляє);" або "→Кривий Ріг/р-н."
