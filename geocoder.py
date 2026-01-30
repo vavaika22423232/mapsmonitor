@@ -33,12 +33,23 @@ _stats = {'hits': 0, 'misses': 0, 'api_calls': 0}
 
 
 def _normalize_city_name(city: str) -> str:
-    """Normalize Ukrainian city name from accusative to nominative case"""
+    """Normalize Ukrainian city name from accusative/genitive to nominative case"""
     city_norm = city.strip()
     city_lower = city_norm.lower()
     
-    # Specific known transformations (accusative -> nominative)
+    # Specific known transformations (accusative/genitive -> nominative)
     known_transforms = {
+        # Genitive (-и/-і) -> Nominative (-а/-я)
+        'софіївки': 'Софіївка',
+        'васильківки': 'Васильківка',
+        'криничок': 'Кринички',
+        'кринички': 'Кринички',
+        'синельникового': 'Синельникове',
+        'павлограда': 'Павлоград',
+        'кривого рогу': 'Кривий Ріг',
+        'середини-буди': 'Середина-Буда',
+        'вільнянська': 'Вільнянськ',
+        # Accusative (-у/-ю) -> Nominative
         'хотімлю': 'Хотімля',
         'балаклію': 'Балаклія',
         'вовчанську': 'Вовчанськ',
@@ -71,7 +82,6 @@ def _normalize_city_name(city: str) -> str:
         'долинської': 'Долинська',
         'долинську': 'Долинська',
         'саксагані': 'Саксагань',
-        'кривого рогу': 'Кривий Ріг',
         # Multi-word cities in accusative case
         'гнилицю першу': 'Гнилиця Перша',
         'велику димерку': 'Велика Димерка',
@@ -81,6 +91,8 @@ def _normalize_city_name(city: str) -> str:
         'малу данилівку': 'Мала Данилівка',
         'нову водолагу': 'Нова Водолага',
         'стару водолагу': 'Стара Водолага',
+        'середину-буду': 'Середина-Буда',
+        'хутір-михайлівський': 'Хутір-Михайлівський',
         # Single-word accusative endings -у/-ю
         'грушуваху': 'Грушуваха',
         'комишуваху': 'Комишуваха',
@@ -102,10 +114,21 @@ def _normalize_city_name(city: str) -> str:
         'просяну': 'Просяна',
         'суданівку': 'Суданівка',
         'дослідне': 'Дослідне',
+        'криничку': 'Кринички',
+        'вільнянську': 'Вільнянськ',
     }
     
     if city_lower in known_transforms:
         return known_transforms[city_lower]
+    
+    # General rules for genitive -> nominative
+    # -ки -> -ка (Софіївки -> Софіївка)
+    if city_lower.endswith('ки') and len(city_lower) > 3:
+        return city_norm[:-1] + 'а'
+    
+    # -ого -> -е (Синельникового -> Синельникове)  
+    if city_lower.endswith('ого') and len(city_lower) > 4:
+        return city_norm[:-3] + 'е'
     
     # General rules for accusative -> nominative
     # -лю -> -ля (Хотімлю -> Хотімля)
@@ -410,6 +433,339 @@ def _call_groq_api(city: str, hint_region: str = None) -> str:
     except Exception as e:
         print(f"[GROQ] Exception: {e}", flush=True)
         return None
+
+
+def groq_normalize_city(city: str) -> str:
+    """
+    🆕 Use Groq to normalize Ukrainian city name to nominative case.
+    Handles complex cases that rule-based normalization misses.
+    
+    Examples:
+    - "Софіївки" -> "Софіївка" (genitive)
+    - "Кривого Рогу" -> "Кривий Ріг" (genitive)
+    - "Синельникового" -> "Синельникове" (genitive)
+    - "Балаклію" -> "Балаклія" (accusative)
+    """
+    if not GROQ_API_KEY or not city or len(city) < 3:
+        return city
+    
+    # First try rule-based normalization
+    normalized = _normalize_city_name(city)
+    if normalized != city:
+        return normalized
+    
+    _stats['api_calls'] += 1
+    
+    prompt = f"""Перетвори назву українського населеного пункту в називний відмінок (nominative case).
+
+Вхід: "{city}"
+
+Правила:
+- Якщо назва вже в називному відмінку - поверни її без змін
+- "Софіївки" (родовий) -> "Софіївка"
+- "Кривого Рогу" (родовий) -> "Кривий Ріг"
+- "Балаклію" (знахідний) -> "Балаклія"
+- "Харкову" (давальний) -> "Харків"
+
+Відповідай ТІЛЬКИ назвою населеного пункту в називному відмінку, без пояснень.
+Відповідь:"""
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 30,
+                "temperature": 0
+            },
+            timeout=3
+        )
+        
+        if not response.ok:
+            return city
+        
+        data = response.json()
+        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Validate - should be similar length, not too different
+        if answer and len(answer) <= len(city) + 5 and len(answer) >= len(city) - 5:
+            # Capitalize first letter
+            answer = answer[0].upper() + answer[1:] if answer else answer
+            print(f"[GROQ] Normalized: '{city}' -> '{answer}'", flush=True)
+            return answer
+        
+        return city
+        
+    except Exception as e:
+        print(f"[GROQ] Normalize exception: {e}", flush=True)
+        return city
+
+
+def groq_validate_city_region(city: str, region: str) -> tuple:
+    """
+    🆕 Use Groq to validate if a city belongs to the given region.
+    Returns (city, correct_region) - may correct the region if wrong.
+    
+    Examples:
+    - ("Дослідне", "Одеська обл.") -> ("Дослідне", "Дніпропетровська обл.")
+    - ("Харків", "Харківська обл.") -> ("Харків", "Харківська обл.") # no change
+    """
+    if not GROQ_API_KEY or not city or not region:
+        return city, region
+    
+    _stats['api_calls'] += 1
+    
+    prompt = f"""Перевір чи населений пункт "{city}" дійсно знаходиться в "{region}".
+
+Якщо ТАК - відповідай: "ПРАВИЛЬНО"
+Якщо НІ - відповідай назвою правильної області у форматі "Назва обл."
+
+Приклади:
+- Дослідне в "Одеська обл." -> "Дніпропетровська обл." (бо Дослідне в Дніпропетровській)
+- Харків в "Харківська обл." -> "ПРАВИЛЬНО"
+
+Відповідь:"""
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 30,
+                "temperature": 0
+            },
+            timeout=3
+        )
+        
+        if not response.ok:
+            return city, region
+        
+        data = response.json()
+        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        if 'ПРАВИЛЬНО' in answer.upper():
+            return city, region
+        
+        # Try to extract correct region
+        if 'обл' in answer.lower():
+            correct_region = answer.strip()
+            if not correct_region.endswith('обл.'):
+                correct_region = correct_region.replace('область', 'обл.').replace('обл', 'обл.')
+            print(f"[GROQ] Validated: {city} ({region}) -> ({correct_region})", flush=True)
+            return city, correct_region
+        
+        return city, region
+        
+    except Exception as e:
+        print(f"[GROQ] Validate exception: {e}", flush=True)
+        return city, region
+
+
+def groq_parse_message(text: str) -> list:
+    """
+    🆕 Use Groq to parse a message and extract cities with regions.
+    This is a smart fallback when regex patterns fail.
+    
+    Returns list of dicts: [{"city": "Харків", "region": "Харківська обл.", "type": "БПЛА"}, ...]
+    """
+    if not GROQ_API_KEY or not text or len(text) < 10:
+        return []
+    
+    _stats['api_calls'] += 1
+    
+    prompt = f"""Проаналізуй повідомлення про загрози БПЛА/ракет і витягни інформацію про міста.
+
+Повідомлення:
+"{text}"
+
+Для кожного згаданого населеного пункту вкажи:
+1. Назва міста/села в називному відмінку
+2. Область (у форматі "Назва обл.")
+3. Тип загрози: БПЛА, Ракета, КАБ або Вибухи
+
+Формат відповіді (JSON array):
+[{{"city": "Місто", "region": "Область обл.", "type": "БПЛА"}}]
+
+Якщо міст немає - відповідай: []
+
+Жаргон:
+- "балалайка", "мопед", "герань", "шахед" = БПЛА
+- "баллістика", "ракета", "калібр" = Ракета
+
+Відповідь:"""
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200,
+                "temperature": 0
+            },
+            timeout=5
+        )
+        
+        if not response.ok:
+            print(f"[GROQ] Parse API error: {response.status_code}", flush=True)
+            return []
+        
+        data = response.json()
+        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        # Try to parse JSON
+        import re
+        json_match = re.search(r'\[.*\]', answer, re.DOTALL)
+        if json_match:
+            try:
+                result = json.loads(json_match.group())
+                if isinstance(result, list):
+                    # Validate and clean results
+                    cleaned = []
+                    for item in result:
+                        if isinstance(item, dict) and 'city' in item:
+                            city = item.get('city', '').strip()
+                            region = item.get('region', '').strip()
+                            threat_type = item.get('type', 'БПЛА').strip()
+                            if city and region:
+                                # Ensure region format
+                                if not region.endswith('обл.'):
+                                    region = region.replace('область', 'обл.').replace('обл', 'обл.')
+                                cleaned.append({
+                                    'city': city,
+                                    'region': region,
+                                    'type': threat_type
+                                })
+                    if cleaned:
+                        print(f"[GROQ] Parsed: {cleaned}", flush=True)
+                    return cleaned
+            except json.JSONDecodeError:
+                pass
+        
+        return []
+        
+    except Exception as e:
+        print(f"[GROQ] Parse exception: {e}", flush=True)
+        return []
+
+
+def groq_translate_russian(city_ru: str) -> str:
+    """
+    🆕 Translate Russian city name to Ukrainian.
+    
+    Examples:
+    - "Кривой Рог" -> "Кривий Ріг"
+    - "Днепр" -> "Дніпро"
+    - "Николаев" -> "Миколаїв"
+    """
+    if not GROQ_API_KEY or not city_ru:
+        return city_ru
+    
+    # Quick check for common Russian names
+    ru_to_ua = {
+        'кривой рог': 'Кривий Ріг',
+        'днепр': 'Дніпро',
+        'николаев': 'Миколаїв',
+        'харьков': 'Харків',
+        'киев': 'Київ',
+        'одесса': 'Одеса',
+        'запорожье': 'Запоріжжя',
+        'херсон': 'Херсон',
+        'чернигов': 'Чернігів',
+        'сумы': 'Суми',
+        'полтава': 'Полтава',
+        'черкассы': 'Черкаси',
+        'кременчуг': 'Кременчук',
+        'мариуполь': 'Маріуполь',
+        'мелитополь': 'Мелітополь',
+        'бердянск': 'Бердянськ',
+        'павлоград': 'Павлоград',
+        'кропивницкий': 'Кропивницький',
+        'житомир': 'Житомир',
+        'винница': 'Вінниця',
+        'ровно': 'Рівне',
+        'луцк': 'Луцьк',
+        'львов': 'Львів',
+        'ивано-франковск': 'Івано-Франківськ',
+        'тернополь': 'Тернопіль',
+        'хмельницкий': 'Хмельницький',
+        'ужгород': 'Ужгород',
+        'черновцы': 'Чернівці',
+        'изюм': 'Ізюм',
+        'купянск': 'Куп\'янськ',
+        'славянск': 'Слов\'янськ',
+        'краматорск': 'Краматорськ',
+        'бахмут': 'Бахмут',
+        'покровск': 'Покровськ',
+        'черноморск': 'Чорноморськ',
+    }
+    
+    city_lower = city_ru.lower().strip()
+    if city_lower in ru_to_ua:
+        return ru_to_ua[city_lower]
+    
+    # Check if it looks Russian (has ы, э, ъ, ё or other Russian-specific chars)
+    russian_chars = set('ыэъёЫЭЪЁ')
+    if not any(c in city_ru for c in russian_chars):
+        # Might already be Ukrainian or transliterated
+        return city_ru
+    
+    _stats['api_calls'] += 1
+    
+    prompt = f"""Перекладі російську назву міста на українську.
+
+Російська назва: "{city_ru}"
+
+Відповідай ТІЛЬКИ українською назвою міста.
+Приклади: "Кривой Рог" -> "Кривий Ріг", "Днепр" -> "Дніпро"
+
+Відповідь:"""
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 30,
+                "temperature": 0
+            },
+            timeout=3
+        )
+        
+        if not response.ok:
+            return city_ru
+        
+        data = response.json()
+        answer = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        
+        if answer and len(answer) <= len(city_ru) + 10:
+            print(f"[GROQ] Translated: '{city_ru}' -> '{answer}'", flush=True)
+            return answer
+        
+        return city_ru
+        
+    except Exception as e:
+        print(f"[GROQ] Translate exception: {e}", flush=True)
+        return city_ru
 
 
 def get_region(city: str, hint_region: str = None) -> str:

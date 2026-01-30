@@ -18,10 +18,13 @@ import sys
 # Імпортуємо геокодер для автоматичного визначення області
 try:
     from geocoder import get_region as geocoder_get_region
+    from geocoder import groq_normalize_city, groq_validate_city_region, groq_parse_message, groq_translate_russian
     GEOCODER_AVAILABLE = True
+    GROQ_AVAILABLE = True
     print("[INFO] Geocoder module loaded successfully", flush=True)
 except ImportError:
     GEOCODER_AVAILABLE = False
+    GROQ_AVAILABLE = False
     print("[WARNING] Geocoder module not available, using fallback", flush=True)
 
 logging.basicConfig(
@@ -309,6 +312,7 @@ CITY_TO_REGION = {
     # Дніпропетровська область - міста та села
     'Павлівка': 'Дніпропетровська обл.',
     'Васильківка': 'Дніпропетровська обл.',
+    'Васильківку': 'Дніпропетровська обл.',
     'Зайцеве': 'Дніпропетровська обл.',
     'Павлоград': 'Дніпропетровська обл.',
     'Синельникове': 'Дніпропетровська обл.',
@@ -322,6 +326,15 @@ CITY_TO_REGION = {
     'Просяну': 'Дніпропетровська обл.',
     'Суданівка': 'Дніпропетровська обл.',
     'Суданівку': 'Дніпропетровська обл.',
+    'Софіївка': 'Дніпропетровська обл.',
+    'Софіївки': 'Дніпропетровська обл.',
+    'Кринички': 'Дніпропетровська обл.',
+    # Сумська область
+    'Середина-Буда': 'Сумська обл.',
+    'Середину-Буду': 'Сумська обл.',
+    'Хутір-Михайлівський': 'Сумська обл.',
+    # Запорізька область
+    'Вільнянськ': 'Запорізька обл.',
     # Полтавська область
     'Глобине': 'Полтавська обл.',
     # Харківська область - додаткові
@@ -507,30 +520,77 @@ def normalize_region(region):
 
 def fix_city_case(city):
     """
-    Виправляє відмінок назви міста - використовує геокодер для нормалізації.
-    Якщо геокодер недоступний, повертає як є.
+    Виправляє відмінок назви міста - конвертує з родового/знахідного в називний.
+    Софіївки -> Софіївка, Васильківку -> Васильківка
+    
+    Використовує:
+    1. Словник відомих міст (geocoder._normalize_city_name)
+    2. Правила для закінчень (-ки→-ка, -ого→-е, тощо)
+    3. Groq AI для складних випадків (fallback)
     """
     if not city:
         return city
     
-    # Використовуємо геокодер для нормалізації (він має _normalize_city_name)
+    city = city.strip()
+    original_city = city
+    
+    # Спочатку пробуємо геокодер (має словник відомих міст)
     if GEOCODER_AVAILABLE:
         try:
             from geocoder import _normalize_city_name
-            return _normalize_city_name(city)
+            normalized = _normalize_city_name(city)
+            if normalized != city:
+                return normalized
         except:
             pass
     
-    # Базова нормалізація якщо геокодер недоступний
-    city = city.strip()
+    # Перевіряємо чи це російська назва і перекладаємо
+    if GROQ_AVAILABLE:
+        try:
+            translated = groq_translate_russian(city)
+            if translated != city:
+                city = translated
+        except:
+            pass
+    
+    # Правила для родового відмінка (Генітив) -> Називний (Номінатив)
+    # -ки -> -ка (Софіївки -> Софіївка, Васильківки -> Васильківка)
+    if city.endswith('ки') and len(city) > 3:
+        return city[:-1] + 'а'
     
     # -ого -> -е (Синельникового -> Синельникове)
     if city.endswith('ого') and len(city) > 4:
         return city[:-3] + 'е'
     
-    # -ку -> -ка (знахідний)
+    # -ої -> -а (Софіївської -> Софіївська) - для прикметників
+    if city.endswith('ої') and len(city) > 3:
+        return city[:-2] + 'а'
+    
+    # Правила для знахідного відмінка (Акузатив) -> Називний
+    # -ку -> -ка (Васильківку -> Васильківка)
     if city.endswith('ку') and len(city) > 3:
         return city[:-1] + 'а'
+    
+    # -ну -> -на (Просяну -> Просяна)
+    if city.endswith('ну') and len(city) > 3:
+        return city[:-1] + 'а'
+    
+    # -ю -> -я (Хотімлю -> Хотімля, але не для коротких слів)
+    if city.endswith('лю') and len(city) > 3:
+        return city[:-1] + 'я'
+    
+    # -у -> -а для міст на -івка, -івця (Дмитрівку -> Дмитрівка)
+    if city.endswith('івку') and len(city) > 5:
+        return city[:-1] + 'а'
+    
+    # Якщо правила не спрацювали і є Groq - пробуємо AI
+    if GROQ_AVAILABLE and city == original_city:
+        try:
+            groq_result = groq_normalize_city(city)
+            if groq_result and groq_result != city:
+                return groq_result
+        except:
+            pass
     
     return city
 
@@ -539,6 +599,7 @@ def validate_city_region(city, region):
     """
     Перевіряє чи область відповідає місту.
     Якщо місто є в CITY_TO_REGION з іншою областю - використовуємо правильну.
+    Якщо є Groq - валідуємо через AI.
     Повертає кортеж (city, region).
     """
     if not city or not region:
@@ -549,6 +610,16 @@ def validate_city_region(city, region):
     if correct_region and correct_region != region:
         logger.info(f"🔧 Виправлення області: {city} ({region}) -> ({correct_region})")
         return city, correct_region
+    
+    # Якщо немає в словнику і є Groq - валідуємо через AI
+    if GROQ_AVAILABLE and not correct_region:
+        try:
+            validated_city, validated_region = groq_validate_city_region(city, region)
+            if validated_region != region:
+                logger.info(f"🤖 Groq виправив область: {city} ({region}) -> ({validated_region})")
+                return validated_city, validated_region
+        except Exception as e:
+            logger.warning(f"⚠️ Помилка Groq валідації: {e}")
     
     return city, region
 
@@ -797,7 +868,8 @@ async def parse_and_split_message(text, channel_name=None):
         
         # Пробуємо знайти заголовок області (без міст після двокрапки)
         # Формат "Область область:" (два слова) або "Дніпропетровщина:" (одне слово)
-        region_header_match = re.match(r'^(\S+(?:\s+область)?):\s*$', clean_line, re.IGNORECASE)
+        # Також підтримуємо формат без двокрапки: "Запорізька область" на окремому рядку
+        region_header_match = re.match(r'^(\S+(?:\s+область)?):?\s*$', clean_line, re.IGNORECASE)
         if region_header_match:
             region_name = region_header_match.group(1).strip()
             region = REGION_MAP.get(region_name, None)
@@ -1275,6 +1347,22 @@ async def parse_and_split_message(text, channel_name=None):
         krutytsya_match = re.match(r'^\d+\s+(?:крутиться|кружляє|кружляють)\s+біля\s+(\S+)', line, re.IGNORECASE)
         if krutytsya_match:
             city = krutytsya_match.group(1).strip()
+            city = fix_city_case(city)
+            city = city[0].upper() + city[1:] if city else city
+            region = current_region
+            if not region:
+                region = CITY_TO_REGION.get(city, None)
+            if not region:
+                region = await get_region_by_city(city, current_region)
+            if region:
+                msg = f"БПЛА {city} ({region})"
+                messages.append(msg)
+                continue
+        
+        # Формат: "N шахеди/шахедів в районі X" (2 шахеди в районі Софіївки)
+        shahedy_v_rayoni_match = re.match(r'^\d+\s*х?\s*шахед[іиів]*\s+в\s+район[іу]?\s+(\S+)\.?$', line, re.IGNORECASE)
+        if shahedy_v_rayoni_match:
+            city = shahedy_v_rayoni_match.group(1).strip().rstrip('.,;')
             city = fix_city_case(city)
             city = city[0].upper() + city[1:] if city else city
             region = current_region
@@ -2570,6 +2658,24 @@ async def parse_and_split_message(text, channel_name=None):
         filtered_messages.append(msg)
     
     logger.info(f"🔍 Відфільтровані повідомлення: {filtered_messages}")
+    
+    # 🆕 GROQ FALLBACK: Якщо regex нічого не знайшов - спробуємо Groq AI
+    if not filtered_messages and GROQ_AVAILABLE and len(text) > 20:
+        try:
+            logger.info(f"🤖 Groq fallback для парсингу: {text[:100]}...")
+            groq_results = groq_parse_message(text)
+            if groq_results:
+                for item in groq_results:
+                    city = item.get('city', '')
+                    region = item.get('region', '')
+                    threat_type = item.get('type', 'БПЛА')
+                    if city and region:
+                        msg = f"{threat_type} {city} ({region})"
+                        filtered_messages.append(msg)
+                        logger.info(f"🤖 Groq знайшов: {msg}")
+        except Exception as e:
+            logger.warning(f"⚠️ Помилка Groq fallback: {e}")
+    
     # Повертаємо знайдені повідомлення
     return filtered_messages
 
