@@ -181,7 +181,7 @@ def _extract_region_colon_cities(line: str, default_region: str = None) -> List[
         return []
     
     entities = []
-        for entry in re.split(r',\s*', cities_part):
+    for entry in re.split(r',\s*', cities_part):
         city = _extract_city_from_entry(entry)
         if city and not is_skip_word(city):
             city = normalize_city(city)
