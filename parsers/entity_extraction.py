@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import logging
 
 from .patterns import PATTERNS
-from .normalize import normalize_city, normalize_region, is_skip_word
+from .normalize import normalize_city, normalize_region, extract_region_from_alias, is_skip_word
 from core.constants import CITIES, REGION_ALIASES, CHANNEL_REGIONS
 
 logger = logging.getLogger(__name__)
@@ -52,24 +52,29 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
             current_region = header_match
             continue
         
-        entity = _extract_city_region_parens(line)
-        if entity:
-            entities.append(entity)
-            continue
+            entity = _extract_city_region_parens(line)
+            if entity:
+                entities.append(entity)
+                continue
+
+            entity = _extract_city_region_alias_parens(line)
+            if entity:
+                entities.append(entity)
+                continue
         
         region_cities = _extract_region_colon_cities(line, current_region)
         if region_cities:
             entities.extend(region_cities)
             continue
         
-        entity = _extract_with_context(line, current_region)
-        if entity:
-            entities.append(entity)
+        context_entities = _extract_with_context(line, current_region)
+        if context_entities:
+            entities.extend(context_entities)
             continue
         
-        entity = _extract_arrow_city(line, current_region)
-        if entity:
-            entities.append(entity)
+        arrow_entities = _extract_arrow_city(line, current_region)
+        if arrow_entities:
+            entities.extend(arrow_entities)
     
     return [e for e in entities if _is_valid_entity(e)]
 
@@ -114,6 +119,31 @@ def _extract_city_region_parens(line: str) -> Optional[ExtractedEntity]:
     )
 
 
+def _extract_city_region_alias_parens(line: str) -> Optional[ExtractedEntity]:
+    match = PATTERNS.location['city_region_alias_parens'].search(line)
+    if not match:
+        return None
+
+    city_raw = match.group(1).strip()
+    region_raw = match.group(2).strip()
+
+    city = _clean_city_name(city_raw)
+    if not city or is_skip_word(city):
+        return None
+
+    city = normalize_city(city)
+    region = normalize_region(region_raw) or extract_region_from_alias(region_raw)
+    if not region:
+        return None
+
+    return ExtractedEntity(
+        city=city,
+        region=region,
+        confidence=0.9,
+        pattern_name='city_region_alias_parens'
+    )
+
+
 def _extract_region_colon_cities(line: str, default_region: str = None) -> List[ExtractedEntity]:
     match = PATTERNS.location['region_colon_cities'].search(line)
     if not match:
@@ -145,91 +175,155 @@ def _extract_region_colon_cities(line: str, default_region: str = None) -> List[
     return entities
 
 
-def _extract_with_context(line: str, current_region: str) -> Optional[ExtractedEntity]:
-    if not current_region:
-        return None
+def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntity]:
+    region = current_region or extract_region_from_alias(line)
+    if not region:
+        return []
+
+    entities: List[ExtractedEntity] = []
     
     match = PATTERNS.location['count_threat_na_city'].search(line)
     if match:
         count = int(match.group(1))
         city = _clean_city_name(match.group(2))
         if city and not is_skip_word(city):
-            return ExtractedEntity(
-                city=normalize_city(city),
-                region=current_region,
-                count=count,
-                confidence=0.85,
-                pattern_name='count_threat_na_city'
-            )
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                count,
+                0.85,
+                'count_threat_na_city'
+            ))
+            return entities
+
+    match = PATTERNS.location['count_na_city'].search(line)
+    if match:
+        count = int(match.group(1))
+        city = _clean_city_name(match.group(2))
+        if city and not is_skip_word(city):
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                count,
+                0.8,
+                'count_na_city'
+            ))
+            return entities
     
     match = PATTERNS.location['bpla_kursom_na'].search(line)
     if match:
         city = _clean_city_name(match.group(1))
         if city and not is_skip_word(city):
-            return ExtractedEntity(
-                city=normalize_city(city),
-                region=current_region,
-                confidence=0.85,
-                pattern_name='bpla_kursom_na'
-            )
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                None,
+                0.85,
+                'bpla_kursom_na'
+            ))
+            return entities
     
     match = PATTERNS.location['n_v_rayoni'].search(line)
     if match:
         count = int(match.group(1))
         city = _clean_city_name(match.group(2))
         if city and not is_skip_word(city):
-            return ExtractedEntity(
-                city=normalize_city(city),
-                region=current_region,
-                count=count,
-                confidence=0.8,
-                pattern_name='n_v_rayoni'
-            )
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                count,
+                0.8,
+                'n_v_rayoni'
+            ))
+            return entities
 
     match = PATTERNS.location['threat_bilya_city'].search(line)
     if match:
         city = _clean_city_name(match.group(1))
         if city and not is_skip_word(city):
-            return ExtractedEntity(
-                city=normalize_city(city),
-                region=current_region,
-                confidence=0.8,
-                pattern_name='threat_bilya_city'
-            )
-    
-    return None
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                None,
+                0.8,
+                'threat_bilya_city'
+            ))
+            return entities
+
+    match = PATTERNS.location['threat_nad_city'].search(line)
+    if match:
+        city = _clean_city_name(match.group(1))
+        if city and not is_skip_word(city):
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                None,
+                0.8,
+                'threat_nad_city'
+            ))
+            return entities
+
+    match = PATTERNS.location['po_shahedu_na'].search(line)
+    if match:
+        city = _clean_city_name(match.group(1))
+        if city and not is_skip_word(city):
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                1,
+                0.75,
+                'po_shahedu_na'
+            ))
+            return entities
+
+    match = PATTERNS.location['city_to_you'].search(line)
+    if match:
+        city = _clean_city_name(match.group(1))
+        if city and not is_skip_word(city):
+            entities.extend(_build_entities_from_city_list(
+                city,
+                region,
+                None,
+                0.75,
+                'city_to_you'
+            ))
+            return entities
+
+    return entities
 
 
-def _extract_arrow_city(line: str, current_region: str) -> Optional[ExtractedEntity]:
-    if not current_region:
-        return None
+def _extract_arrow_city(line: str, current_region: str) -> List[ExtractedEntity]:
+    region = current_region or extract_region_from_alias(line)
+    if not region:
+        return []
     
     match = PATTERNS.location['arrow_city'].match(line)
     if not match:
-        return None
-    
-    content = match.group(1).strip()
-    if content in REGION_ALIASES:
-        return None
-    
-    if '/' in content:
-        parts = content.split('/')
-        city = parts[-1].strip()
-        if city.lower() in ['р-н', 'район', 'околиці'] or city in REGION_ALIASES:
-            city = parts[0].strip()
+        arrow_index = max(line.rfind('→'), line.rfind('➡️'))
+        if arrow_index >= 0:
+            content = line[arrow_index + 1:].strip()
+        else:
+            return []
     else:
-        city = content
+        content = match.group(1).strip()
     
-    city = _clean_city_name(city)
-    if not city or is_skip_word(city):
-        return None
+    if content in REGION_ALIASES:
+        return []
     
-    return ExtractedEntity(
-        city=normalize_city(city),
-        region=current_region,
-        confidence=0.8,
-        pattern_name='arrow_city'
-    )
+    cities = _split_cities(content)
+    entities: List[ExtractedEntity] = []
+    for city in cities:
+        city = _clean_city_name(city)
+        if not city or is_skip_word(city):
+            continue
+        entities.append(ExtractedEntity(
+            city=normalize_city(city),
+            region=region,
+            confidence=0.8,
+            pattern_name='arrow_city'
+        ))
+
+    return entities
 
 
 def _extract_city_from_entry(entry: str) -> Optional[str]:
@@ -250,6 +344,18 @@ def _extract_city_from_entry(entry: str) -> Optional[str]:
     match = re.match(r'^(?:БпЛА|БПЛА)\s+курсом\s+на\s+(.+?)$', entry, re.IGNORECASE)
     if match:
         return match.group(1).strip().rstrip('.,;')
+
+    match = re.match(r'^\d+\s+(?:біля|поблизу)\s+(.+?)$', entry, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().rstrip('.,;')
+
+    match = re.match(r'^(?:кружляє|крутиться)\s+біля\s+(.+?)$', entry, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().rstrip('.,;')
+
+    match = re.match(r'^(?:шахед|БпЛА|БПЛА)\s+над\s+(.+?)$', entry, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().rstrip('.,;')
     
     return None
 
@@ -260,6 +366,7 @@ def _clean_city_name(city: str) -> str:
     
     city = city.strip()
     city = re.sub(r'^[💥🛸🛵⚠️❗️🔴🚀✈️👁️•▪️\*\s]+', '', city)
+    city = re.sub(r'\([^)]*\)', '', city).strip()
     city = re.sub(r'[💥🛸🛵⚠️❗️🔴🚀✈️👁️]+', '', city)
     city = re.sub(r'^\d+\s*х?\s*', '', city)
     city = re.sub(r'^(?:БПЛА|БпЛА|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
@@ -271,6 +378,41 @@ def _clean_city_name(city: str) -> str:
         city = city.split(' та ')[0].strip()
     city = city.strip().rstrip('.,;!?')
     return city
+
+
+def _split_cities(content: str) -> List[str]:
+    parts = re.split(r'\s*(?:,|\s+та\s+|/)\s*', content)
+    filtered = []
+    for part in parts:
+        if not part:
+            continue
+        low = part.lower()
+        if low in ['р-н', 'район', 'околиці'] or part in REGION_ALIASES:
+            continue
+        filtered.append(part)
+    return filtered
+
+
+def _build_entities_from_city_list(
+    cities_text: str,
+    region: str,
+    count: Optional[int],
+    confidence: float,
+    pattern: str
+) -> List[ExtractedEntity]:
+    entities: List[ExtractedEntity] = []
+    for city in _split_cities(cities_text):
+        city = _clean_city_name(city)
+        if not city or is_skip_word(city):
+            continue
+        entities.append(ExtractedEntity(
+            city=normalize_city(city),
+            region=region,
+            count=count,
+            confidence=confidence,
+            pattern_name=pattern
+        ))
+    return entities
 
 
 def _is_valid_entity(entity: ExtractedEntity) -> bool:

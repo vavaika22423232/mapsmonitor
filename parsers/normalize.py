@@ -12,7 +12,9 @@ _MARKDOWN = re.compile(r'\*\*|__|~~')
 _URLS = re.compile(r'https?://[^\s]+')
 _USERNAMES = re.compile(r'@\w+')
 _EMOJI_ONLY = re.compile(r'^[➡️⬅️↗️↘️↖️↙️⬆️⬇️🇺🇦\s|]+$')
-_SKIP_LINE = re.compile(r'Підписатися|ППОшник|Моніторинг 24/7|Радар України|Напрямок ракет')
+_SKIP_LINE = re.compile(
+    r'Підписатися|ППОшник|Моніторинг 24/7|Радар України|Напрямок ракет|Карта повітряних тривог|Не фіксується'
+)
 _MULTI_SPACE = re.compile(r'\s+')
 _EMOJI_PREFIX = re.compile(r'^[💥🛸🛵⚠️❗️🔴🚀✈️👁️📡\*\s]+')
 _REGION_SUFFIX = re.compile(r'\s*\([^)]*(?:щина|ччина|область|обл\.?)[^)]*\)\s*$', re.IGNORECASE)
