@@ -243,6 +243,32 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
                 'count_city'
             ))
             return entities
+
+    match = PATTERNS.location['kursom_na_city'].search(line)
+    if match:
+        cities_text = match.group(1)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                None,
+                0.75,
+                'kursom_na_city'
+            ))
+            return entities
+
+    match = PATTERNS.location['moves_to_city'].search(line)
+    if match:
+        cities_text = match.group(1)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                None,
+                0.75,
+                'moves_to_city'
+            ))
+            return entities
     
     match = PATTERNS.location['bpla_kursom_na'].search(line)
     if match:

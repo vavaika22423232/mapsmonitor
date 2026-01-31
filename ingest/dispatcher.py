@@ -12,7 +12,7 @@ from core.cache import DeduplicationCache
 from parsers.routing import route_message
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
-from ai.fallback import ai_fallback_parse
+from ai.fallback import ai_fallback_parse, ai_enrich_events
 
 logger = logging.getLogger(__name__)
 
@@ -65,19 +65,23 @@ class MessageDispatcher:
 
         # 2. Parse message into events
         events = route_message(message.text, message.channel)
+
+        # 3. AI enrich (max AI) on parsed events
+        if events and self.use_ai_fallback:
+            events = ai_enrich_events(events, message.text)
         
-        # 3. AI fallback if no events found
+        # 4. AI fallback if no events found
         if not events and self.use_ai_fallback:
             events = ai_fallback_parse(message.text, message.channel)
         
-        # 4. Filter invalid events
+        # 5. Filter invalid events
         events = [e for e in events if e.is_valid]
         
         if not events:
             logger.debug("No valid events found")
             return 0
         
-        # 5. Deduplicate and send
+        # 6. Deduplicate and send
         sent = 0
         for event in events:
             # Check deduplication

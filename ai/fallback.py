@@ -129,3 +129,26 @@ def ai_get_region(city: str, hint: str = None) -> Optional[str]:
         return None
     
     return client.get_region(city, hint)
+
+
+def ai_enrich_events(events: List[Event], hint_text: str = "") -> List[Event]:
+    """
+    Enrich parsed events with AI validation and region filling.
+
+    - If region is missing, try to infer it from AI.
+    - If region exists, validate/correct it with AI.
+    """
+    client = get_client()
+    if not client.is_available or not events:
+        return events
+
+    enriched = []
+    for event in events:
+        if event.city and not event.region:
+            event.region = client.get_region(event.city, hint_text) or event.region
+        if event.city and event.region:
+            _, validated = client.validate_city_region(event.city, event.region)
+            event.region = validated
+        enriched.append(event)
+
+    return enriched
