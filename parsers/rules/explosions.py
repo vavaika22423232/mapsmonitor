@@ -58,5 +58,26 @@ def parse_explosions(text: str, channel: str = None) -> List[Event]:
                     raw_text=text
                 ))
         return events
+
+    # "💥 City (Region) ... Загроза обстрілу"
+    match = re.search(
+        r'^[💥⚠️❗️\s]*(.+?)\s*\((.+?обл\.?)\)[\s\n]*'
+        r'Загроза\s+обстрілу',
+        text,
+        re.IGNORECASE | re.MULTILINE
+    )
+    if match:
+        city = normalize_city(match.group(1))
+        region = normalize_region(match.group(2))
+        if city and region:
+            events.append(Event(
+                type=ThreatType.EXPLOSION,
+                city=city,
+                region=region,
+                source=channel or "",
+                confidence=0.9,
+                raw_text=text
+            ))
+        return events
     
     return events
