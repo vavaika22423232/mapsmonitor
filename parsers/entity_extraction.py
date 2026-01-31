@@ -323,6 +323,19 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
             ))
             return entities
 
+    match = PATTERNS.location['v_rayoni_city'].search(line)
+    if match:
+        cities_text = match.group(1)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                None,
+                0.75,
+                'v_rayoni_city'
+            ))
+            return entities
+
     match = PATTERNS.location['threat_nad_city'].search(line)
     if match:
         cities_text = match.group(1)
@@ -490,6 +503,18 @@ def _build_entities_from_city_list(
 ) -> List[ExtractedEntity]:
     entities: List[ExtractedEntity] = []
     for city in _split_cities(cities_text):
+        if '-' in city:
+            left, right = [c.strip() for c in city.split('-', 1)]
+            if left in CITIES and right in CITIES:
+                for part in (left, right):
+                    entities.extend(_build_entities_from_city_list(
+                        part,
+                        region,
+                        count,
+                        confidence,
+                        pattern
+                    ))
+                continue
         direction_match = PATTERNS.location['v_bik_city'].search(city)
         if direction_match:
             city = direction_match.group(1)

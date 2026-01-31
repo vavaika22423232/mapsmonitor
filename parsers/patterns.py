@@ -194,6 +194,12 @@ LOCATION = PatternGroup({
         r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
     ),
 
+    # Format: "в районі City" / "в район City"
+    'v_rayoni_city': _compile(
+        r'в\s+район[іу]?\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+
     # Format: "шахед над City" / "над City"
     'threat_nad_city': _compile(
         r'(?:[•▪️\s]*\d+\s*х?\s*)?'

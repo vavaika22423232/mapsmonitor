@@ -85,6 +85,10 @@ def _dedup(items: List[str]) -> List[str]:
 def _is_standalone_location(line: str) -> bool:
     if not line or len(line) < 3:
         return False
-    if any(x in line.lower() for x in ['радар', 'україна', 'ппо', 'моніторинг']):
+    if any(x in line.lower() for x in [
+        'радар', 'україна', 'ппо', 'моніторинг', 'є рух', 'виконується', 'пуск', 'бпла'
+    ]):
+        return False
+    if len(line.split()) > 3:
         return False
     return bool(re.match(r'^[А-ЯІЇЄҐа-яіїєґ\'\-\s]+$', line))
