@@ -185,6 +185,17 @@ def _extract_with_context(line: str, current_region: str) -> Optional[ExtractedE
                 confidence=0.8,
                 pattern_name='n_v_rayoni'
             )
+
+    match = PATTERNS.location['threat_bilya_city'].search(line)
+    if match:
+        city = _clean_city_name(match.group(1))
+        if city and not is_skip_word(city):
+            return ExtractedEntity(
+                city=normalize_city(city),
+                region=current_region,
+                confidence=0.8,
+                pattern_name='threat_bilya_city'
+            )
     
     return None
 
@@ -248,7 +259,7 @@ def _clean_city_name(city: str) -> str:
         return ""
     
     city = city.strip()
-    city = re.sub(r'^[💥🛸🛵⚠️❗️🔴🚀✈️👁️\*\s]+', '', city)
+    city = re.sub(r'^[💥🛸🛵⚠️❗️🔴🚀✈️👁️•▪️\*\s]+', '', city)
     city = re.sub(r'[💥🛸🛵⚠️❗️🔴🚀✈️👁️]+', '', city)
     city = re.sub(r'^\d+\s*х?\s*', '', city)
     city = re.sub(r'^(?:БПЛА|БпЛА|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
