@@ -203,6 +203,7 @@ CITIES = {
 # Channel -> default region (for regional channels)
 CHANNEL_REGIONS = {
     'odessaveter': 'Одеська обл.',
+    'monitor1654': 'Харківська обл.',
 }
 
 # Words/phrases to skip (not real locations)

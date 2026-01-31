@@ -27,6 +27,10 @@ def route_message(text: str, channel: str = None) -> List[Event]:
     normalized = normalize_text(text)
     if not normalized:
         return []
+
+    # Skip general alerts/shelter instructions
+    if PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized):
+        return []
     
     # 1. Ballistic all-clear
     if PATTERNS.rocket['vidbiy_ballistyka'].search(normalized):
