@@ -60,6 +60,8 @@ class Event:
             return True
         if self.type == ThreatType.LAUNCH and self.city:
             return True
+        if self.region and self.region.lower().startswith('невідом'):
+            return False
         return bool(self.city and self.region and self.type != ThreatType.UNKNOWN)
     
     def format_message(self) -> str:
