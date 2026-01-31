@@ -37,6 +37,12 @@ def parse_launches(text: str, channel: str = None) -> List[Event]:
                 loc = _clean_launch_location(plus_match.group(1))
                 if loc:
                     locations.append(loc)
+                    continue
+
+            if _is_standalone_location(line):
+                loc = _clean_launch_location(line)
+                if loc:
+                    locations.append(loc)
 
     events = []
     for loc in _dedup(locations):
@@ -74,3 +80,11 @@ def _dedup(items: List[str]) -> List[str]:
         seen.add(key)
         result.append(item)
     return result
+
+
+def _is_standalone_location(line: str) -> bool:
+    if not line or len(line) < 3:
+        return False
+    if any(x in line.lower() for x in ['радар', 'україна', 'ппо', 'моніторинг']):
+        return False
+    return bool(re.match(r'^[А-ЯІЇЄҐа-яіїєґ\'\-\s]+$', line))

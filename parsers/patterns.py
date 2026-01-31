@@ -3,7 +3,7 @@ Centralized precompiled regex patterns.
 All patterns compiled ONCE at import time for performance.
 """
 import re
-from typing import Pattern, Dict
+from typing import Pattern, Dict, Optional
 
 # Compile flags
 _FLAGS = re.IGNORECASE | re.UNICODE
@@ -20,7 +20,7 @@ class PatternGroup:
     def __init__(self, patterns: Dict[str, Pattern]):
         self._patterns = patterns
     
-    def match_any(self, text: str) -> re.Match | None:
+    def match_any(self, text: str) -> Optional[re.Match]:
         """Try all patterns, return first match."""
         for pattern in self._patterns.values():
             m = pattern.search(text)
@@ -120,7 +120,7 @@ LOCATION = PatternGroup({
         r'(\d+)\s*х?\s*'
         r'(?:шахед[іиів]*|БпЛА|БПЛА)\s+'
         r'(?:курсом\s+)?на\s+'
-        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+        r'([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s/,]+)'
     ),
 
     # Format: "N на City" (when region context is known)
@@ -128,12 +128,19 @@ LOCATION = PatternGroup({
         r'[•▪️\s]*'
         r'(\d+)\s*х?\s*'
         r'(?:курсом\s+)?на\s+'
-        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+        r'([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s/,]+)'
+    ),
+
+    # Format: "N City" (short form under region header)
+    'count_city': _compile(
+        r'[•▪️\s]*'
+        r'(\d+)\s*х?\s*'
+        r'([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s/,]+)'
     ),
     
     # Format: "БпЛА курсом на City"
     'bpla_kursom_na': _compile(
-        r'(?:БпЛА|БПЛА)'
+        r'(?:БпЛА|БПЛА|шахед[іиів]*|мопед|балалайк[аи]?|Молнія)'
         r'(?:\s+типу\s+[^\n]+?)?\s+курсом\s+на\s+'
         r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
     ),
@@ -166,6 +173,12 @@ LOCATION = PatternGroup({
         r'(?:шахед[іиів]*|БпЛА|БПЛА)?\s*'
         r'(?:крутиться|кружляє|кружляють|маневрує|маневрують)\s+'
         r'(?:біля|поблизу)\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+
+    # Format: "в бік City" / "у бік City"
+    'v_bik_city': _compile(
+        r'(?:в|у)\s+бік\s+'
         r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
     ),
 
