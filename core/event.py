@@ -58,6 +58,8 @@ class Event:
         """Check if event has minimum required data."""
         if self.type == ThreatType.BALLISTIC and not self.city:
             return True
+        if self.type == ThreatType.LAUNCH and self.city:
+            return True
         return bool(self.city and self.region and self.type != ThreatType.UNKNOWN)
     
     def format_message(self) -> str:
@@ -74,6 +76,13 @@ class Event:
             if self.city and self.region:
                 return f"Ракета {self.city} ({self.region})"
             return "Загроза балістики!"
+
+        if self.type == ThreatType.LAUNCH:
+            if self.city and self.region:
+                return f"Пуск {self.city} ({self.region})"
+            if self.city:
+                return f"Пуск {self.city}"
+            return "Пуск БПЛА"
         
         return f"{self.type.value} {self.city} ({self.region})"
     

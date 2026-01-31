@@ -13,6 +13,7 @@ class ThreatType(Enum):
     KAB = "КАБ"
     BALLISTIC = "Балістика"
     EXPLOSION = "Вибухи"
+    LAUNCH = "Пуск"
     UNKNOWN = "Невідомо"
     
     @classmethod
@@ -30,6 +31,8 @@ class ThreatType(Enum):
             return cls.BALLISTIC
         if any(x in s_lower for x in ['вибух', 'explosi', '💥']):
             return cls.EXPLOSION
+        if any(x in s_lower for x in ['пуск', 'пуски']):
+            return cls.LAUNCH
         
         return cls.UNKNOWN
 

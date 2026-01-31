@@ -19,3 +19,8 @@ def test_count_na_city_pattern():
 def test_city_to_you_pattern():
     text = "Павлоград - до вас шахед"
     assert PATTERNS.location["city_to_you"].search(text)
+
+
+def test_launch_source_pattern():
+    text = "Пуски БПЛА з Приморсько-Ахтарська"
+    assert PATTERNS.launch["source_location"].search(text)

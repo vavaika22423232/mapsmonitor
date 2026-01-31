@@ -6,7 +6,7 @@ from core.event import Event
 from core.constants import ThreatType
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
-from parsers.rules import parse_kab, parse_rockets, parse_explosions, parse_bpla
+from parsers.rules import parse_kab, parse_rockets, parse_explosions, parse_bpla, parse_launches
 
 
 def route_message(text: str, channel: str = None) -> List[Event]:
@@ -41,20 +41,25 @@ def route_message(text: str, channel: str = None) -> List[Event]:
             confidence=0.95
         )]
     
-    # 2. KAB
+    # 2. Launches (BPLA)
+    events = parse_launches(normalized, channel)
+    if events:
+        return events
+
+    # 3. KAB
     events = parse_kab(normalized, channel)
     if events:
         return events
     
-    # 3. Rockets / Ballistic
+    # 4. Rockets / Ballistic
     events = parse_rockets(normalized, channel)
     if events:
         return events
     
-    # 4. Explosions
+    # 5. Explosions
     events = parse_explosions(normalized, channel)
     if events:
         return events
     
-    # 5. BPLA (default)
+    # 6. BPLA (default)
     return parse_bpla(normalized, channel)

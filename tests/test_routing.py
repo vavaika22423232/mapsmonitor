@@ -29,3 +29,10 @@ def test_route_arrow_multi_cities():
     cities = {e.city for e in events}
     assert "Короп" in cities
     assert "Бахмач" in cities
+
+
+def test_route_launch_message():
+    text = "Пуски БПЛА з Приморсько-Ахтарська"
+    events = route_message(text, "test")
+    assert events
+    assert events[0].type == ThreatType.LAUNCH

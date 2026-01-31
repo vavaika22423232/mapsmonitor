@@ -67,6 +67,26 @@ THREAT_TYPE = PatternGroup({
 })
 
 
+# ==========================================================================
+# LAUNCH DETECTION (BPLA LAUNCHES)
+# ==========================================================================
+LAUNCH = PatternGroup({
+    'keywords': _compile(
+        r'(?:пуск|пуски|зафіксовано\s+пуски|фіксуються\s+пуски|попередньо\s+фіксуються\s+пуски)',
+        _FLAGS
+    ),
+    'source_location': _compile(
+        r'(?:з|із)\s+(?:ае|а/е|аеродрома|аеродрому)?\s*'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)',
+        _FLAGS
+    ),
+    'plus_location': _compile(
+        r'^[+•▪️]\s*([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)\s*$',
+        _FLAGS
+    )
+})
+
+
 # ============================================================================
 # CITY + REGION EXTRACTION (UNIFIED)
 # ============================================================================
@@ -297,6 +317,7 @@ class Patterns:
     """Central access point for all pattern groups."""
     clean = CLEAN
     threat_type = THREAT_TYPE
+    launch = LAUNCH
     location = LOCATION
     kab = KAB
     rocket = ROCKET
