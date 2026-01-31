@@ -11,6 +11,7 @@ from core.event import Event, ThreatType
 from core.cache import DeduplicationCache
 from parsers.routing import route_message
 from parsers.classification import validate_city_region
+from core.constants import REGION_ALIASES
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
 from ai.fallback import ai_fallback_parse, ai_enrich_events
@@ -72,12 +73,14 @@ class MessageDispatcher:
         # 2. Parse message into events
         events = route_message(message.text, message.channel)
 
-        # 3. Local validation on parsed events
-        if events:
+        # 3. Local validation on parsed events (skip if header region exists)
+        header_region = _detect_region_header(normalized)
+        if events and not header_region:
             for event in events:
                 if event.city and event.region:
-                    _, corrected = validate_city_region(event.city, event.region)
-                    event.region = corrected
+                    corrected = validate_city_region(event.city, event.region)[1]
+                    if corrected:
+                        event.region = corrected
 
         # 4. AI enrich (max AI) on parsed events
         if events and self.use_ai_fallback:
@@ -120,6 +123,23 @@ class MessageDispatcher:
         self._sent_count += sent
         
         return sent
+
+
+def _detect_region_header(text: str) -> Optional[str]:
+    """Detect region header in message (e.g., "Харківщина:" or "Харківська область:")."""
+    if not text:
+        return None
+    for line in text.split('\n'):
+        clean = line.strip().lstrip('✈️🛵🛸⚠️❗️🔴📡 ').strip()
+        if not clean:
+            continue
+        if clean.endswith(':'):
+            clean = clean[:-1].strip()
+        if clean in REGION_ALIASES:
+            return REGION_ALIASES[clean]
+        if 'област' in clean.lower():
+            return clean.replace(' область', ' обл.').replace(' Область', ' обл.')
+    return None
     
     async def run_polling_loop(self):
         """
