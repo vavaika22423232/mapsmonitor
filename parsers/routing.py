@@ -28,8 +28,13 @@ def route_message(text: str, channel: str = None) -> List[Event]:
     if not normalized:
         return []
 
-    # Skip general alerts/shelter instructions
-    if PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized):
+    # Skip general alerts/shelter instructions only if no threat keywords
+    is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
+    has_threat = (
+        PATTERNS.threat_type.match_any(normalized)
+        or PATTERNS.launch['keywords'].search(normalized)
+    )
+    if is_alert and not has_threat:
         return []
     
     # 1. Ballistic all-clear

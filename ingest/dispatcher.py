@@ -59,7 +59,12 @@ class MessageDispatcher:
         
         # 1. Skip alert-only messages to avoid AI fallback noise
         normalized = normalize_text(message.text)
-        if PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized):
+        is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
+        has_threat = (
+            PATTERNS.threat_type.match_any(normalized)
+            or PATTERNS.launch['keywords'].search(normalized)
+        )
+        if is_alert and not has_threat:
             logger.debug("Alert/shelter message skipped")
             return 0
 
