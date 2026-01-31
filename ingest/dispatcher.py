@@ -124,23 +124,6 @@ class MessageDispatcher:
         
         return sent
 
-
-def _detect_region_header(text: str) -> Optional[str]:
-    """Detect region header in message (e.g., "Харківщина:" or "Харківська область:")."""
-    if not text:
-        return None
-    for line in text.split('\n'):
-        clean = line.strip().lstrip('✈️🛵🛸⚠️❗️🔴📡 ').strip()
-        if not clean:
-            continue
-        if clean.endswith(':'):
-            clean = clean[:-1].strip()
-        if clean in REGION_ALIASES:
-            return REGION_ALIASES[clean]
-        if 'област' in clean.lower():
-            return clean.replace(' область', ' обл.').replace(' Область', ' обл.')
-    return None
-    
     async def run_polling_loop(self):
         """
         Main polling loop - check for new messages and process them.
@@ -165,7 +148,7 @@ def _detect_region_header(text: str) -> Optional[str]:
             except Exception as e:
                 logger.error(f"Polling loop error: {e}")
                 await asyncio.sleep(self.telegram.poll_interval)
-    
+
     @property
     def stats(self) -> dict:
         """Get dispatcher statistics."""
@@ -174,6 +157,25 @@ def _detect_region_header(text: str) -> Optional[str]:
             'sent': self._sent_count,
             'cache_size': self.cache.size,
         }
+
+
+def _detect_region_header(text: str) -> Optional[str]:
+    """Detect region header in message (e.g., "Харківщина:" or "Харківська область:")."""
+    if not text:
+        return None
+    for line in text.split('\n'):
+        clean = line.strip().lstrip('✈️🛵🛸⚠️❗️🔴📡 ').strip()
+        if not clean:
+            continue
+        if clean.endswith(':'):
+            clean = clean[:-1].strip()
+        if clean in REGION_ALIASES:
+            return REGION_ALIASES[clean]
+        if 'област' in clean.lower():
+            return clean.replace(' область', ' обл.').replace(' Область', ' обл.')
+    return None
+
+    
 
 
 async def create_and_run_dispatcher(
