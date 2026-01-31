@@ -1,1 +1,1 @@
-worker: python channel_forwarder_polling.py
+worker: python main.py

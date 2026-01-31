@@ -28,18 +28,22 @@ git push -u origin main
 **Name**: `telegram-forwarder`
 **Environment**: `Python 3`
 **Build Command**: `pip install -r requirements.txt`
-**Start Command**: `python channel_forwarder_polling.py`
+**Start Command**: `python main.py`
 
 ### Крок 3: Environment Variables
 
 Додайте наступні змінні в Render Dashboard:
 
 ```
-TELEGRAM_API_ID=24031340
-TELEGRAM_API_HASH=2daaa58652e315ce52adb1090313d36a
-TELEGRAM_SESSION=1BJWap1sBuy6rg3J6zXFs4Xtq-nKAqnHnKjxRIh7T3rmY4zF1YRHhhDX9UzPzw29NLqAVArSEV-XFx2KWHBZEQxsOLHLArWEgLkH2L_Q9-5p8zR5qnQU-yd8XXh0gGP5IAptyEcpM-U0FVi3lNaOBdAN9KqLko8Q0HfuzEaeJSu_tRV7rAHCcP1qd-CbeB9NQ8eZM-eSMph2nahucd__C27fJreae5OUaDgi6-jwxuoeJJsfv-wGTJWyZ1mmdCQL_Zg3nfVw8P0MEiIQG2Ha4WWPBD3ZF9TEg3w0Uhis2obwHJ3CRNM9nPg7fZH1dN29lUeAznpnnHVzPip0TBrZp0sE1n6qeru4=
+TELEGRAM_API_ID=<your_id>
+TELEGRAM_API_HASH=<your_hash>
+TELEGRAM_SESSION=<your_string_session>
 SOURCE_CHANNELS=UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,ukrainsiypposhnik
 TARGET_CHANNEL=mapstransler
+POLL_INTERVAL=30
+DEDUP_INTERVAL=300
+GROQ_API_KEY=<optional>
+LOG_LEVEL=INFO
 ```
 
 ### Крок 4: Deploy
@@ -57,10 +61,10 @@ Render автоматично:
 
 Ви побачите:
 ```
-[INFO] 🚀 Запуск Channel Forwarder (Polling mode)...
-[INFO] ✅ Авторизовано: / (263781966038)
-[INFO] ✅ Цільовий канал: mapstransler_bot
-[INFO] 📌 UkraineAlarmSignal: збережено початковий ID 365882
+[INFO] Starting polling loop (interval: 30s)
+[INFO] Connected as: <user>
+[INFO] Target: @mapstransler
+[INFO] Initial ID for @channel: <id>
 ```
 
 ### 🔄 Оновлення

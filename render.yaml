@@ -1,11 +1,11 @@
 services:
-  - type: web
+  - type: worker
     name: telegram-forwarder
     env: python
     region: frankfurt
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python channel_forwarder_polling.py
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_API_ID
         sync: false
@@ -19,3 +19,9 @@ services:
         value: mapstransler
       - key: POLL_INTERVAL
         value: "30"
+      - key: DEDUP_INTERVAL
+        value: "300"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: "INFO"
