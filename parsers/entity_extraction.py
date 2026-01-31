@@ -424,6 +424,13 @@ def _clean_city_name(city: str) -> str:
     if ' та ' in city:
         city = city.split(' та ')[0].strip()
     city = city.strip().rstrip('.,;!?')
+
+    city_lower = city.lower()
+    if city in REGION_ALIASES or city_lower in {k.lower() for k in REGION_ALIASES}:
+        return ""
+    if city_lower.endswith('щина') or city_lower.endswith('ччина'):
+        return ""
+
     return city
 
 
@@ -434,7 +441,9 @@ def _split_cities(content: str) -> List[str]:
         if not part:
             continue
         low = part.lower()
-        if low in ['р-н', 'район', 'околиці'] or part in REGION_ALIASES:
+        if low in ['р-н', 'район', 'околиці']:
+            continue
+        if part in REGION_ALIASES or low in {k.lower() for k in REGION_ALIASES}:
             continue
         filtered.append(part)
     return filtered
