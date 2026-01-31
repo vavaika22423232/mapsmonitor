@@ -467,7 +467,7 @@ def _split_cities(content: str) -> List[str]:
         if not part:
             continue
         low = part.lower()
-        if low in ['р-н', 'район', 'околиці']:
+        if low in ['р-н', 'р-ну', 'р-на', 'район', 'околиці']:
             continue
         if part in REGION_ALIASES or low in {k.lower() for k in REGION_ALIASES}:
             continue
