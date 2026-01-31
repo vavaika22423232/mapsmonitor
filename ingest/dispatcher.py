@@ -10,6 +10,7 @@ from .telegram_client import TelegramIngestClient, IncomingMessage
 from core.event import Event, ThreatType
 from core.cache import DeduplicationCache
 from parsers.routing import route_message
+from parsers.classification import validate_city_region
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
 from ai.fallback import ai_fallback_parse, ai_enrich_events
@@ -71,22 +72,29 @@ class MessageDispatcher:
         # 2. Parse message into events
         events = route_message(message.text, message.channel)
 
-        # 3. AI enrich (max AI) on parsed events
+        # 3. Local validation on parsed events
+        if events:
+            for event in events:
+                if event.city and event.region:
+                    _, corrected = validate_city_region(event.city, event.region)
+                    event.region = corrected
+
+        # 4. AI enrich (max AI) on parsed events
         if events and self.use_ai_fallback:
             events = ai_enrich_events(events, message.text)
         
-        # 4. AI fallback if no events found
+        # 5. AI fallback if no events found
         if not events and self.use_ai_fallback:
             events = ai_fallback_parse(message.text, message.channel)
         
-        # 5. Filter invalid events
+        # 6. Filter invalid events
         events = [e for e in events if e.is_valid]
         
         if not events:
             logger.debug("No valid events found")
             return 0
         
-        # 6. Deduplicate and send
+        # 7. Deduplicate and send
         sent = 0
         for event in events:
             # Check deduplication

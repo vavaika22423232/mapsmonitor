@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 import hashlib
 
-from core.constants import ThreatType
+from core.constants import ThreatType, REGIONS
 
 
 @dataclass
@@ -61,6 +61,8 @@ class Event:
         if self.type == ThreatType.LAUNCH and self.city:
             return True
         if self.region and self.region.lower().startswith('невідом'):
+            return False
+        if self.region and self.region not in REGIONS and self.region != 'РФ':
             return False
         return bool(self.city and self.region and self.type != ThreatType.UNKNOWN)
     

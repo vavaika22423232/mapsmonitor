@@ -443,6 +443,8 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'[💥🛸🛵⚠️❗️🔴🚀✈️👁️]+', '', city)
     city = re.sub(r'^\d+\s*х?\s*', '', city)
     city = re.sub(r'^(?:БПЛА|БпЛА|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'^(?:останній|крутиться|кружляє|кружляють|маневрує|маневрують)\s+', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'^(?:між|поміж)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+щин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+ччин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+[ву]\s+бік\s+.+$', '', city, flags=re.IGNORECASE)
@@ -452,6 +454,10 @@ def _clean_city_name(city: str) -> str:
     city = city.strip().rstrip('.,;!?')
 
     city_lower = city.lower()
+    if 'невизначеного' in city_lower and 'тип' in city_lower:
+        return ""
+    if 'бпла' in city_lower or 'шахед' in city_lower:
+        return ""
     if city in REGION_ALIASES or city_lower in {k.lower() for k in REGION_ALIASES}:
         return ""
     if city_lower.endswith('щина') or city_lower.endswith('ччина'):
