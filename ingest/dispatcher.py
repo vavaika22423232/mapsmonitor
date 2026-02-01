@@ -59,11 +59,23 @@ class MessageDispatcher:
         
         logger.debug(f"Processing message from @{message.channel}")
         
-        # 1. Normalize and parse message into events
+        # 1. Skip pure alert messages without any threat keywords
         normalized = normalize_text(message.text)
+        is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
+        has_threat = (
+            PATTERNS.threat_type.match_any(normalized)
+            or PATTERNS.launch['keywords'].search(normalized)
+            or 'заgroza' in normalized.lower()
+            or 'загроза' in normalized.lower()
+        )
+        if is_alert and not has_threat:
+            logger.debug("Pure alert/shelter message skipped (no threat)")
+            return 0
+        
+        # 2. Parse message into events
         events = route_message(message.text, message.channel)
 
-        # 2. Local validation on parsed events (skip if header region exists)
+        # 3. Local validation on parsed events (skip if header region exists)
         header_region = _detect_region_header(normalized)
         if events and not header_region:
             for event in events:
@@ -72,22 +84,22 @@ class MessageDispatcher:
                     if corrected:
                         event.region = corrected
 
-        # 3. AI enrich (max AI) on parsed events
+        # 4. AI enrich (max AI) on parsed events
         if events and self.use_ai_fallback:
             events = ai_enrich_events(events, message.text)
         
-        # 4. AI fallback if no events found
+        # 5. AI fallback if no events found
         if not events and self.use_ai_fallback:
             events = ai_fallback_parse(message.text, message.channel)
         
-        # 5. Filter invalid events
+        # 6. Filter invalid events
         events = [e for e in events if e.is_valid]
         
         if not events:
             logger.debug("No valid events found")
             return 0
         
-        # 6. Deduplicate and send
+        # 7. Deduplicate and send
         sent = 0
         for event in events:
             # Check deduplication

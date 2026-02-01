@@ -362,14 +362,88 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
 
     match = PATTERNS.location['city_to_you'].search(line)
     if match:
-        cities_text = match.group(1)
-        if cities_text:
+        city_text = match.group(1)
+        count_text = match.group(2) if len(match.groups()) > 1 else None
+        count = int(count_text) if count_text else None
+        if city_text:
             entities.extend(_build_entities_from_city_list(
-                cities_text,
+                city_text,
+                region,
+                count,
+                0.80,
+                'city_to_you'
+            ))
+            return entities
+    
+    # "City - уважно, поряд шахед"
+    match = PATTERNS.location['city_alert'].search(line)
+    if match:
+        city_text = match.group(1)
+        if city_text:
+            entities.extend(_build_entities_from_city_list(
+                city_text,
                 region,
                 None,
                 0.75,
-                'city_to_you'
+                'city_alert'
+            ))
+            return entities
+    
+    # "N шахеда біля City"
+    match = PATTERNS.location['count_bilya_city'].search(line)
+    if match:
+        count = int(match.group(1))
+        city_text = match.group(2)
+        if city_text:
+            entities.extend(_build_entities_from_city_list(
+                city_text,
+                region,
+                count,
+                0.85,
+                'count_bilya_city'
+            ))
+            return entities
+    
+    # "новий біля City"
+    match = PATTERNS.location['noviy_bilya_city'].search(line)
+    if match:
+        city_text = match.group(1)
+        if city_text:
+            entities.extend(_build_entities_from_city_list(
+                city_text,
+                region,
+                1,
+                0.80,
+                'noviy_bilya_city'
+            ))
+            return entities
+    
+    # "останній на City"
+    match = PATTERNS.location['ostanniy_na_city'].search(line)
+    if match:
+        city_text = match.group(1)
+        # Skip if it's "ППУ" or other non-city terms
+        if city_text and not city_text.upper().startswith('ППУ'):
+            entities.extend(_build_entities_from_city_list(
+                city_text,
+                region,
+                1,
+                0.75,
+                'ostanniy_na_city'
+            ))
+            return entities
+    
+    # "повз City на другий_City" - extract destination
+    match = PATTERNS.location['povz_city_na'].search(line)
+    if match:
+        city_text = match.group(1)
+        if city_text:
+            entities.extend(_build_entities_from_city_list(
+                city_text,
+                region,
+                None,
+                0.80,
+                'povz_city_na'
             ))
             return entities
 

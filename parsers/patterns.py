@@ -208,16 +208,47 @@ LOCATION = PatternGroup({
         r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
     ),
 
-    # Format: "City - до вас шахед" / "City - до вас"
+    # Format: "City - до вас шахед" / "City - до вас N шахеда"
     'city_to_you': _compile(
         r'^([А-ЯІЇЄҐа-яіїєґ\'\-\s]+?)\s*'
         r'[-–—]\s*'
-        r'(?:до\s+вас\s+)?(?:шахед|БпЛА|БПЛА)'
+        r'до\s+вас\s+(?:(\d+)\s+)?(?:шахед|БпЛА|БПЛА)'
+    ),
+    
+    # Format: "City - уважно, поряд шахед" / "City - уважно"
+    'city_alert': _compile(
+        r'^([А-ЯІЇЄҐа-яіїєґ\'\-\s]+?)\s*'
+        r'[-–—]\s*'
+        r'уважно'
     ),
 
     # Format: "по шахеду на City"
     'po_shahedu_na': _compile(
         r'(?:по\s+)?шахед[уыуаіиів]*\s+на\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+    
+    # Format: "N шахеда біля City" without region prefix
+    'count_bilya_city': _compile(
+        r'^(\d+)\s+шахед[аиів]*\s+біля\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+    
+    # Format: "новий біля City" / "новий шахед біля City"
+    'noviy_bilya_city': _compile(
+        r'(?:новий|нові)\s+(?:шахед[іиів]*)?\s*біля\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+    
+    # Format: "останній на City" / "останній в ППУ"
+    'ostanniy_na_city': _compile(
+        r'останні[йі]\s+(?:на|в)\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
+    ),
+    
+    # Format: "повз City на другий_City" - extract destination city
+    'povz_city_na': _compile(
+        r'повз\s+[А-ЯІЇЄҐа-яіїєґ\'\-\s]+\s+на\s+'
         r'([А-ЯІЇЄҐа-яіїєґ\'\-\s]+)'
     ),
     
