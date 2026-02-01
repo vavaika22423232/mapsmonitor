@@ -67,7 +67,7 @@ class Event:
         return bool(self.city and self.region and self.type != ThreatType.UNKNOWN)
     
     def format_message(self) -> str:
-        """Format event as output message in unified format: City (Region) - Threat."""
+        """Format event as output message."""
         if not self.is_valid:
             return ""
         
@@ -85,16 +85,23 @@ class Event:
                     return f"Пуск {self.city}"
                 return "Пуск БПЛА"
         
-        # Unified format for all threats: City (Region) - Threat
+        # Explosions: "City (Region) вибухи."
+        if self.type == ThreatType.EXPLOSION:
+            return f"{self.city} ({self.region}) вибухи."
+        
+        # Artillery: "City (Region)\nЗагроза обстрілу!"
+        if self.type == ThreatType.ARTILLERY:
+            return f"{self.city} ({self.region})\nЗагроза обстрілу!"
+        
+        # All other threats: "TYPE City (Region)"
         threat_label = {
             ThreatType.DRONE: "БПЛА",
             ThreatType.KAB: "КАБ",
             ThreatType.BALLISTIC: "Ракета",
-            ThreatType.EXPLOSION: "Вибухи",
-            ThreatType.LAUNCH: f"Пуск",
+            ThreatType.LAUNCH: "Пуск",
         }.get(self.type, self.type.value)
         
-        return f"{self.city} ({self.region}) - {threat_label}"
+        return f"{threat_label} {self.city} ({self.region})"
     
     def __str__(self) -> str:
         return self.format_message()
