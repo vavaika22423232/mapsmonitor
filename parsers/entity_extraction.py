@@ -532,6 +532,12 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'^(?:між|поміж)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+щин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+ччин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
+    
+    # Remove "з City" / "від City" / "з боку City" suffixes (direction/origin)
+    city = re.sub(r'\s+з\s+[А-ЯІЇЄҐа-яіїєґ][^\s]+\s*$', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'\s+від\s+[А-ЯІЇЄҐа-яіїєґ][^\s]+\s*$', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'\s+з\s+боку\s+[А-ЯІЇЄҐа-яіїєґ][^\s]+\s*$', '', city, flags=re.IGNORECASE)
+    
     city = re.sub(r'\s+[ву]\s+бік\s+.+$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+курсом\s+на\s+.+$', '', city, flags=re.IGNORECASE)
     if ' та ' in city:
@@ -539,6 +545,10 @@ def _clean_city_name(city: str) -> str:
     city = city.strip().rstrip('.,;!?')
 
     city_lower = city.lower()
+    
+    # Filter out region-only references (на Житомирщину, на Харківщину)
+    if city_lower.endswith('щину') or city_lower.endswith('ччину'):
+        return ""
     
     # Filter out direction phrases
     if re.search(r'на\s+(?:північ|південь|захід|схід)', city_lower):
