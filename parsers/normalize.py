@@ -4,7 +4,7 @@ All normalization happens BEFORE parsing.
 """
 import re
 from typing import Optional
-from core.constants import REGION_ALIASES, CITY_CASE_TRANSFORMS, SKIP_WORDS
+from core.constants import REGION_ALIASES, CITY_CASE_TRANSFORMS, SKIP_WORDS, CITIES
 
 
 # Precompiled patterns for normalization
@@ -73,18 +73,20 @@ def normalize_text(text: str) -> str:
     return '\n'.join(lines)
 
 
-def normalize_city(city: str) -> str:
+def normalize_city(city: str, use_ai: bool = True) -> str:
     """
     Normalize city name to nominative case.
     
     Handles:
     - Case transformations (accusative/genitive -> nominative)
     - Emoji removal
-    - Prefix cleanup ("Район", "бпла", etc.)
+    - Prefix cleanup ("Район", "bpla", etc.)
     - Two-word city fixes ("Нову Миколаївку" -> "Нова Миколаївка")
+    - AI normalization for unknown cases (if use_ai=True)
     
     Args:
         city: Raw city name
+        use_ai: Use AI for normalization if rule-based fails
         
     Returns:
         Normalized city name in nominative case
@@ -92,6 +94,7 @@ def normalize_city(city: str) -> str:
     if not city:
         return ""
     
+    original_city = city
     city = city.strip()
     
     # Remove emoji and special chars
@@ -125,10 +128,29 @@ def normalize_city(city: str) -> str:
         first_fixed = _fix_adjective_case(first)
         second_fixed = _fix_noun_case(second)
         if first_fixed != first or second_fixed != second:
-            return f"{first_fixed} {second_fixed}"
+            normalized = f"{first_fixed} {second_fixed}"
+            # Check if result is in known cities
+            if normalized in CITIES:
+                return normalized
     
     # Single word transformations
-    return _fix_noun_case(city)
+    normalized = _fix_noun_case(city)
+    
+    # If result is in known cities, return it
+    if normalized in CITIES:
+        return normalized
+    
+    # If AI enabled and city changed but not in known list, try AI normalization
+    if use_ai and normalized != original_city and normalized not in CITIES:
+        try:
+            from ai.fallback import ai_normalize_city
+            ai_result = ai_normalize_city(city)
+            if ai_result and ai_result != city:
+                return ai_result
+        except Exception:
+            pass  # Fallback to rule-based result
+    
+    return normalized
 
 
 def _fix_adjective_case(word: str) -> str:
@@ -153,9 +175,37 @@ def _fix_noun_case(word: str) -> str:
     if lower in CITY_CASE_TRANSFORMS:
         return CITY_CASE_TRANSFORMS[lower]
     
-    # Rules for genitive -> nominative
+    # Rules for genitive case -> nominative
+    # -ова/-ева -> -ів (Харкова -> Харків, but Нова stays Нова)
+    if lower.endswith('ова') and len(word) > 4:
+        # Check if it's an adjective (Нова, Стара) - these should stay as is
+        if lower not in ['нова', 'стара', 'велика', 'мала']:
+            return word[:-3] + 'ів'
+    
+    if lower.endswith('ева') and len(word) > 4:
+        return word[:-3] + 'ів'
+    
+    # -ада/-яда -> -ад/-яд (Павлограда -> Павлоград)
+    if lower.endswith('ада') and len(word) > 4:
+        return word[:-1]
+    
+    if lower.endswith('яда') and len(word) > 4:
+        return word[:-1]
+    
+    # -ополя -> -опіль (Мелітополя -> Мелітополь)
+    if lower.endswith('ополя'):
+        return word[:-2] + 'ль'
+    
+    # -ополю -> -опіль (Мелітополю -> Мелітополь)
+    if lower.endswith('ополю'):
+        return word[:-2] + 'ль'
+    
+    # -пра -> -про (Дніпра -> Дніпро)
+    if lower.endswith('пра') and len(word) > 4:
+        return word[:-1] + 'о'
+    
     # -ки -> -ка (Софіївки -> Софіївка)
-    if lower.endswith('ки'):
+    if lower.endswith('ки') and len(word) > 3:
         return word[:-1] + 'а'
     
     # -ого -> -е (Синельникового -> Синельникове)
@@ -164,20 +214,40 @@ def _fix_noun_case(word: str) -> str:
     
     # Rules for accusative -> nominative
     # -ку -> -ка (Васильківку -> Васильківка)
-    if lower.endswith('ку'):
+    if lower.endswith('ку') and len(word) > 3:
         return word[:-1] + 'а'
     
     # -ну -> -на (Просяну -> Просяна)
-    if lower.endswith('ну'):
+    if lower.endswith('ну') and len(word) > 3:
         return word[:-1] + 'а'
     
     # -лю -> -ля (Хотімлю -> Хотімля)
-    if lower.endswith('лю'):
+    if lower.endswith('лю') and len(word) > 3:
         return word[:-1] + 'я'
     
     # -гу -> -га
-    if lower.endswith('гу'):
+    if lower.endswith('гу') and len(word) > 3:
         return word[:-1] + 'а'
+    
+    # -ом -> без окончания (Павлоградом -> Павлоград, Харковом -> Харків)
+    if lower.endswith('ом') and len(word) > 4:
+        base = word[:-2]
+        # Check if base ends with consonant
+        if base and base[-1].lower() in 'бвгджзклмнпрстфхцчшщ':
+            return base
+    
+    # -і/-ові -> remove (у Павлограді -> Павлоград, в Харкові -> Харків)
+    if lower.endswith('ові') and len(word) > 5:
+        return word[:-3]
+    
+    if lower.endswith('і') and len(word) > 3:
+        # Check if it's locative case (ends with -ові, -аді, -ді, etc.)
+        if lower.endswith('аді') or lower.endswith('яді'):
+            return word[:-2] + 'д'
+        # Generic -і removal for other locative cases
+        base = word[:-1]
+        if base and base[-1].lower() in 'вджклмнпрстфхцчшщ':
+            return base
     
     # Capitalize first letter
     if word and word[0].islower():
