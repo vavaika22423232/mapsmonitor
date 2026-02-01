@@ -539,6 +539,15 @@ def _clean_city_name(city: str) -> str:
     city = city.strip().rstrip('.,;!?')
 
     city_lower = city.lower()
+    
+    # Filter out direction phrases
+    if re.search(r'на\s+(?:північ|південь|захід|схід)', city_lower):
+        return ""
+    
+    # Filter out phrases starting with directions
+    if re.match(r'^(?:західн|східн|північн|південн|захід|схід|північ|південь)', city_lower):
+        return ""
+    
     if 'невизначеного' in city_lower and 'тип' in city_lower:
         return ""
     if 'бпла' in city_lower or 'шахед' in city_lower:
