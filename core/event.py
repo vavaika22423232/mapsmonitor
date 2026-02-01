@@ -95,7 +95,8 @@ class Event:
         
         # All other threats: "TYPE City (Region)"
         threat_label = {
-            ThreatType.DRONE: "БПЛА",
+            ThreatType.BPLA: "БПЛА",
+            ThreatType.ROCKET: "Ракета",
             ThreatType.KAB: "КАБ",
             ThreatType.BALLISTIC: "Ракета",
             ThreatType.LAUNCH: "Пуск",
