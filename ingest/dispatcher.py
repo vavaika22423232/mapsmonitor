@@ -59,21 +59,11 @@ class MessageDispatcher:
         
         logger.debug(f"Processing message from @{message.channel}")
         
-        # 1. Skip alert-only messages to avoid AI fallback noise
+        # 1. Normalize and parse message into events
         normalized = normalize_text(message.text)
-        is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
-        has_threat = (
-            PATTERNS.threat_type.match_any(normalized)
-            or PATTERNS.launch['keywords'].search(normalized)
-        )
-        if is_alert and not has_threat:
-            logger.debug("Alert/shelter message skipped")
-            return 0
-
-        # 2. Parse message into events
         events = route_message(message.text, message.channel)
 
-        # 3. Local validation on parsed events (skip if header region exists)
+        # 2. Local validation on parsed events (skip if header region exists)
         header_region = _detect_region_header(normalized)
         if events and not header_region:
             for event in events:
@@ -82,22 +72,22 @@ class MessageDispatcher:
                     if corrected:
                         event.region = corrected
 
-        # 4. AI enrich (max AI) on parsed events
+        # 3. AI enrich (max AI) on parsed events
         if events and self.use_ai_fallback:
             events = ai_enrich_events(events, message.text)
         
-        # 5. AI fallback if no events found
+        # 4. AI fallback if no events found
         if not events and self.use_ai_fallback:
             events = ai_fallback_parse(message.text, message.channel)
         
-        # 6. Filter invalid events
+        # 5. Filter invalid events
         events = [e for e in events if e.is_valid]
         
         if not events:
             logger.debug("No valid events found")
             return 0
         
-        # 7. Deduplicate and send
+        # 6. Deduplicate and send
         sent = 0
         for event in events:
             # Check deduplication

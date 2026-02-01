@@ -44,9 +44,7 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
         if not line:
             continue
         
-        if PATTERNS.skip['alerts'].search(line) or PATTERNS.skip['shelter'].search(line):
-            continue
-        
+        # Check for inline region headers first
         inline_header = _extract_inline_region_header(line)
         if inline_header:
             current_region, line = inline_header
