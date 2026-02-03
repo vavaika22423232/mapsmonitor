@@ -511,7 +511,7 @@ def _clean_city_name(city: str) -> str:
     
     city = city.strip()
     city = re.sub(r'^[💥🛸🛵⚠️❗️🔴🚀✈️👁️•▪️\*\s]+', '', city)
-    city = re.sub(r'\([^)]*\)', '', city).strip()
+    city = re.sub(r'\([^)]*\)?', '', city).strip()  # Remove incomplete parens too
     city = re.sub(r'[💥🛸🛵⚠️❗️🔴🚀✈️👁️]+', '', city)
     city = re.sub(r'^\d+\s*х?\s*', '', city)
     city = re.sub(r'^(?:БПЛА|БпЛА|БПЛA|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
