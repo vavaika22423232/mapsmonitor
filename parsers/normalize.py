@@ -3,6 +3,7 @@ Text normalization - clean and standardize input.
 All normalization happens BEFORE parsing.
 """
 import re
+from functools import lru_cache
 from typing import Optional
 from core.constants import REGION_ALIASES, CITY_CASE_TRANSFORMS, SKIP_WORDS
 
@@ -73,6 +74,7 @@ def normalize_text(text: str) -> str:
     return '\n'.join(lines)
 
 
+@lru_cache(maxsize=4096)
 def normalize_city(city: str) -> str:
     """
     Normalize city name to nominative case.

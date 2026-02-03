@@ -11,6 +11,12 @@ from .patterns import PATTERNS
 from .normalize import normalize_city, normalize_region, extract_region_from_alias, is_skip_word
 from core.constants import CITIES, REGION_ALIASES, CHANNEL_REGIONS
 
+REGION_ALIASES_LOWER = {k.lower() for k in REGION_ALIASES}
+SUMMARY_COUNT_RE = re.compile(r'^\s*[А-ЯІЇЄҐа-яіїєґ\s]+—\s*\d+х\s*$')
+SUMMARY_HEADER_RE = re.compile(r'^\s*По\s+БпЛА\b', re.IGNORECASE)
+SPECIAL_ATTENTION_RE = re.compile(r'^Особлива\s+увага\s*:\s*(.*)$', re.IGNORECASE)
+MAX_ATTENTION_ITEMS = 80
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,12 +45,55 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
     entities = []
     current_region = CHANNEL_REGIONS.get(channel) if channel else None
     
+    special_attention = False
+    attention_buffer: List[str] = []
+
     for line in text.strip().split('\n'):
         line = line.strip()
         if not line:
+            if special_attention and attention_buffer:
+                cities_text = ', '.join(attention_buffer)
+                entities.extend(_build_entities_from_city_list(
+                    cities_text,
+                    None,
+                    None,
+                    0.7,
+                    'special_attention'
+                ))
+                attention_buffer = []
+            special_attention = False
             continue
         
         if PATTERNS.skip['alerts'].search(line) or PATTERNS.skip['shelter'].search(line):
+            continue
+
+        # Skip regional summary counts like "Сумщина — 1х"
+        if SUMMARY_COUNT_RE.match(line):
+            continue
+        if SUMMARY_HEADER_RE.match(line):
+            continue
+
+        # Parse "Особлива увага" blocks with city list
+        attention_match = SPECIAL_ATTENTION_RE.match(line)
+        if attention_match:
+            special_attention = True
+            tail = attention_match.group(1).strip()
+            if tail:
+                attention_buffer.append(tail)
+            continue
+        if special_attention:
+            attention_buffer.append(line)
+            if len(attention_buffer) >= MAX_ATTENTION_ITEMS:
+                cities_text = ', '.join(attention_buffer)
+                entities.extend(_build_entities_from_city_list(
+                    cities_text,
+                    None,
+                    None,
+                    0.7,
+                    'special_attention'
+                ))
+                attention_buffer = []
+                special_attention = False
             continue
         
         inline_header = _extract_inline_region_header(line)
@@ -80,6 +129,16 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
         if arrow_entities:
             entities.extend(arrow_entities)
     
+    if special_attention and attention_buffer:
+        cities_text = ', '.join(attention_buffer)
+        entities.extend(_build_entities_from_city_list(
+            cities_text,
+            None,
+            None,
+            0.7,
+            'special_attention'
+        ))
+
     return [e for e in entities if _is_valid_entity(e)]
 
 
@@ -488,7 +547,7 @@ def _split_cities(content: str) -> List[str]:
         low = part.lower()
         if low in ['р-н', 'р-ну', 'р-на', 'район', 'околиці']:
             continue
-        if part in REGION_ALIASES or low in {k.lower() for k in REGION_ALIASES}:
+        if part in REGION_ALIASES or low in REGION_ALIASES_LOWER:
             continue
         filtered.append(part)
     return filtered
@@ -503,27 +562,33 @@ def _build_entities_from_city_list(
 ) -> List[ExtractedEntity]:
     entities: List[ExtractedEntity] = []
     for city in _split_cities(cities_text):
-        if '-' in city:
-            left, right = [c.strip() for c in city.split('-', 1)]
-            if left in CITIES and right in CITIES:
-                for part in (left, right):
-                    entities.extend(_build_entities_from_city_list(
-                        part,
-                        region,
-                        count,
-                        confidence,
-                        pattern
-                    ))
-                continue
+        if any(dash in city for dash in ['-', '–', '—']):
+            parts = re.split(r'\s*[-–—]\s*', city, maxsplit=1)
+            if len(parts) == 2:
+                left, right = [c.strip() for c in parts]
+                left_norm = normalize_city(left, use_ai=False) or left
+                right_norm = normalize_city(right, use_ai=False) or right
+                if left_norm in CITIES and right_norm in CITIES:
+                    for part in (left_norm, right_norm):
+                        entities.extend(_build_entities_from_city_list(
+                            part,
+                            region,
+                            count,
+                            confidence,
+                            pattern
+                        ))
+                    continue
         direction_match = PATTERNS.location['v_bik_city'].search(city)
         if direction_match:
             city = direction_match.group(1)
         city = _clean_city_name(city)
         if not city or is_skip_word(city):
             continue
+        normalized_city = normalize_city(city)
+        resolved_region = region or get_region_for_city(normalized_city, region)
         entities.append(ExtractedEntity(
-            city=normalize_city(city),
-            region=region,
+            city=normalized_city,
+            region=resolved_region,
             count=count,
             confidence=confidence,
             pattern_name=pattern

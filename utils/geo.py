@@ -10,7 +10,7 @@ import asyncio
 
 import aiohttp
 
-from core.constants import CITIES
+from core.constants import CITIES, CITY_TO_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -71,17 +71,16 @@ def get_region_for_city(city: str, hint: str = None) -> Optional[str]:
     if not city:
         return None
     
-    # 1. Check local dictionary
+    # 1. Check local dictionary (fast path)
     if city in CITIES:
         return CITIES[city]
-    
-    # Try with capital first letter
-    city_cap = city[0].upper() + city[1:] if city else city
-    if city_cap in CITIES:
-        return CITIES[city_cap]
+    city_lower = city.lower()
+    region = CITY_TO_REGION.get(city_lower)
+    if region:
+        return region
     
     # 2. Check cache
-    cache_key = city.lower()
+    cache_key = city_lower
     if cache_key in _cache:
         return _cache[cache_key]
     

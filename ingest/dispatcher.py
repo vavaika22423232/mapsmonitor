@@ -39,7 +39,10 @@ class MessageDispatcher:
     ):
         self.telegram = telegram_client
         self.cache = DeduplicationCache(ttl_seconds=dedup_ttl)
+        self.raw_cache = DeduplicationCache(ttl_seconds=120)
         self.use_ai_fallback = use_ai_fallback
+        self._normalize_cache = {}
+        self._normalize_cache_order = []
         
         self._processed_count = 0
         self._sent_count = 0
@@ -59,8 +62,25 @@ class MessageDispatcher:
         
         logger.debug(f"Processing message from @{message.channel}")
         
-        # 1. Skip alert-only messages to avoid AI fallback noise
-        normalized = normalize_text(message.text)
+        # 1. Normalize text with small cache
+        cache_key = f"{message.channel}:{message.id}"
+        normalized = self._normalize_cache.get(cache_key)
+        if normalized is None:
+            normalized = normalize_text(message.text)
+            self._normalize_cache[cache_key] = normalized
+            self._normalize_cache_order.append(cache_key)
+            if len(self._normalize_cache_order) > 512:
+                old_key = self._normalize_cache_order.pop(0)
+                self._normalize_cache.pop(old_key, None)
+        normalized_lower = normalized.lower()
+
+        # 1.1. Soft dedup by raw text (avoid repeated channel spam)
+        raw_key = normalized_lower.strip()
+        if raw_key and self.raw_cache.check_and_add(raw_key):
+            logger.debug("Raw text duplicate skipped")
+            return 0
+
+        # 2. Skip alert-only messages to avoid AI fallback noise
         is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
         has_threat = (
             PATTERNS.threat_type.match_any(normalized)

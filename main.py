@@ -48,7 +48,7 @@ def main():
         'SOURCE_CHANNELS',
         'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,povitryanatrivogaaa,'
         'raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,'
-        'veselyy_pivden,sectorv666,vanek_nikolaev,monitor1654'
+        'sectorv666,vanek_nikolaev,monitor1654'
     ).split(',')
     target = os.getenv('TARGET_CHANNEL', 'mapstransler')
     
