@@ -7,7 +7,8 @@ from typing import List, Optional
 
 from .groq_client import get_client
 from core.event import Event
-from core.constants import ThreatType, CITY_CASE_TRANSFORMS, REGION_ALIASES, SKIP_WORDS
+from core.constants import ThreatType, REGION_ALIASES, SKIP_WORDS
+from parsers.normalize import normalize_city
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,8 @@ def ai_fallback_parse(text: str, source: str = "") -> List[Event]:
 
             # Require city or region presence in original text (anti-hallucination)
             city_lower = city.lower()
-            city_in_text = city_lower in text_lower
-            if not city_in_text:
-                for form, canonical in CITY_CASE_TRANSFORMS.items():
-                    if canonical.lower() == city_lower and form in text_lower:
-                        city_in_text = True
-                        break
+            city_normalized = normalize_city(city).lower()
+            city_in_text = city_lower in text_lower or city_normalized in text_lower
 
             region_lower = region.lower()
             region_in_text = (

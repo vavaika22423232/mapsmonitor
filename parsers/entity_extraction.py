@@ -532,6 +532,8 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'\s+курсом\s+на\s+.+$', '', city, flags=re.IGNORECASE)
     # Remove district suffix "р-н" attached to city name
     city = re.sub(r'р-н\s*$', '', city, flags=re.IGNORECASE)
+    # Split glued words like "Очаківсела" -> "Очаків"
+    city = re.sub(r'(ів|ка|ки|не|ин|ів)(?:села|міста|району|області)\s*$', r'\1', city, flags=re.IGNORECASE)
     if ' та ' in city:
         city = city.split(' та ')[0].strip()
     city = city.strip().rstrip('.,;!?')
@@ -541,14 +543,21 @@ def _clean_city_name(city: str) -> str:
     if len(city) < 3:
         return ""
     # Skip common non-city words and truncated prefixes
-    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом', 'шт', 'кам', 'сам', 'дні', 'хар', 'пол', 'оде', 'мик', 'зап', 'берегом', 'берег', 'море', 'морем'):
+    # Note: removed 'зап' - conflicts with Запоріжжя
+    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом', 'шт', 'кам', 'сам', 'дні', 'хар', 'пол', 'оде', 'мик', 'берегом', 'берег', 'море', 'морем'):
+        return ""
+    # Skip common nouns that are not cities
+    garbage_words = {'небо', 'столба', 'столб', 'застава', 'заставу', 'сторону', 'напрямок', 'напрямку', 
+                     'північ', 'південь', 'схід', 'захід', 'центр', 'район', 'села', 'міста', 'області',
+                     'ракета', 'ракети', 'ракету', 'дрон', 'дрона', 'дрони', 'бпла', 'шахед', 'каб',
+                     'летит', 'летить', 'літає', 'коси', 'косу', 'косі', 'коса'}
+    if city_lower in garbage_words:
         return ""
     if 'невизначеного' in city_lower and 'тип' in city_lower:
         return ""
     if 'бпла' in city_lower or 'шахед' in city_lower:
         return ""
-    if city in REGION_ALIASES or city_lower in {k.lower() for k in REGION_ALIASES}:
-        return ""
+    # Note: removed REGION_ALIASES check - city names like "Запоріжжя" are also cities
     if city_lower.endswith('щина') or city_lower.endswith('ччина') or city_lower.endswith('щини'):
         return ""
     if 'межі' in city_lower or 'межа' in city_lower:
@@ -563,6 +572,9 @@ def _clean_city_name(city: str) -> str:
         return ""
     # Skip phrases not cities
     if 'центр області' in city_lower or 'маневр' in city_lower:
+        return ""
+    # Skip geographic features (not settlements)
+    if 'коси' in city_lower or 'коса' in city_lower or 'косу' in city_lower:
         return ""
     # Skip Russian phrases
     if 'сторону' in city_lower or 'летят' in city_lower or 'пока' in city_lower:
