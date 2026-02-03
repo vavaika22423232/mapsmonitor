@@ -174,37 +174,30 @@ async def _visicom_geocode(city: str, hint_region: str = None) -> Optional[str]:
                 
                 data = await response.json()
                 
-                # Visicom returns features array
-                features = data.get('features', [])
-                if not features:
+                # Visicom returns single Feature or FeatureCollection
+                if data.get('type') == 'Feature':
+                    props = data.get('properties', {})
+                elif data.get('type') == 'FeatureCollection':
+                    features = data.get('features', [])
+                    if not features:
+                        return None
+                    props = features[0].get('properties', {})
+                else:
                     return None
-                
-                props = features[0].get('properties', {})
                 
                 # Check it's in Ukraine
-                country = props.get('country', '')
-                if country and 'україн' not in country.lower() and 'ukrain' not in country.lower():
+                country = props.get('country', '') or props.get('country_code', '')
+                if country and 'україн' not in country.lower() and 'ua' not in country.lower():
                     return None
                 
-                # Get region (область)
-                region = props.get('settlement_type') or props.get('region') or props.get('admin_level_4')
-                if not region:
-                    # Try other fields
-                    region = props.get('name')
-                    if region and ('область' in region.lower() or 'обл' in region.lower()):
-                        pass
-                    else:
-                        region = None
+                # Get region from level1 (область)
+                region = props.get('level1', '')
                 
-                # Alternative: parse from address
+                # Special case: Київ (no level1, it's a special city)
                 if not region:
-                    address = props.get('address', '')
-                    if 'область' in address.lower():
-                        parts = address.split(',')
-                        for part in parts:
-                            if 'область' in part.lower() or 'обл.' in part.lower():
-                                region = part.strip()
-                                break
+                    name = props.get('name', '')
+                    if name.lower() == 'київ':
+                        region = 'Київська область'
                 
                 if region:
                     return _format_region(region)
