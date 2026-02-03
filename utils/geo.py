@@ -107,12 +107,27 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
     if not city:
         return None
     
+    # Pre-filter garbage before any lookup
+    city_lower = city.lower().strip()
+    if len(city) < 3:
+        return None
+    # Skip obvious non-cities
+    garbage_words = ('на', 'над', 'під', 'до', 'від', 'рух', 'курс', 'курсом', 'берег', 'берегом', 
+                     'море', 'морем', 'шт', 'кам', 'сам', 'центр', 'напрямку')
+    if city_lower in garbage_words:
+        return None
+    # Skip region names
+    if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ська'):
+        return None
+    if city_lower.endswith('ччина') or city_lower.endswith('щини'):
+        return None
+    
     # Check local first
     result = get_region_for_city(city, hint_region)
     if result:
         return result
     
-    cache_key = city.lower()
+    cache_key = city_lower
     
     # Try Visicom first (Ukrainian API, best for Ukrainian cities)
     if VISICOM_API_KEY:
@@ -149,6 +164,13 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
 async def _visicom_geocode(city: str, hint_region: str = None) -> Optional[str]:
     """Geocode using Visicom API (Ukrainian geocoder)."""
     try:
+        # Skip obvious non-cities
+        city_lower = city.lower()
+        if len(city) < 3 or city_lower in ('на', 'над', 'під', 'до', 'рух', 'курс', 'берег', 'море'):
+            return None
+        if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ська'):
+            return None
+        
         query = f"{city}, Україна"
         if hint_region:
             region_clean = hint_region.replace('обл.', '').replace('область', '').strip()
@@ -190,6 +212,25 @@ async def _visicom_geocode(city: str, hint_region: str = None) -> Optional[str]:
                 if country and 'україн' not in country.lower() and 'ua' not in country.lower():
                     return None
                 
+                # Check it's a settlement, not a region/district
+                categories = props.get('categories', '')
+                obj_type = props.get('type', '') or props.get('settlement_type', '')
+                # Valid: місто, село, селище, смт, etc
+                # Invalid: область, район
+                if categories:
+                    cat_lower = categories.lower()
+                    if 'adm_region' in cat_lower or 'adm_district' in cat_lower:
+                        logger.debug(f"Visicom: {city} is region/district, skipping")
+                        return None
+                
+                # Verify result name matches query (fuzzy)
+                result_name = props.get('name', '').lower()
+                if result_name and city_lower not in result_name and result_name not in city_lower:
+                    # Allow partial match for cities like "Кам'янське" -> "кам"
+                    if len(city) > 3 and not result_name.startswith(city_lower[:3]):
+                        logger.debug(f"Visicom: name mismatch {city} != {result_name}")
+                        return None
+                
                 # Get region from level1 (область)
                 region = props.get('level1', '')
                 
@@ -213,6 +254,13 @@ async def _visicom_geocode(city: str, hint_region: str = None) -> Optional[str]:
 async def _opencage_geocode(city: str, hint_region: str = None) -> Optional[str]:
     """Geocode using OpenCage API."""
     try:
+        # Skip obvious non-cities
+        city_lower = city.lower()
+        if len(city) < 3 or city_lower in ('на', 'над', 'під', 'до', 'рух', 'курс', 'берег', 'море'):
+            return None
+        if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ська'):
+            return None
+        
         query = f"{city}, Україна"
         if hint_region:
             region_clean = hint_region.replace('обл.', '').replace('область', '').strip()
@@ -247,6 +295,21 @@ async def _opencage_geocode(city: str, hint_region: str = None) -> Optional[str]
                 if components.get('country_code', '').lower() != 'ua':
                     return None
                 
+                # Check it's a settlement type, not region/district
+                obj_type = components.get('_type', '')
+                if obj_type in ('state', 'county', 'state_district'):
+                    logger.debug(f"OpenCage: {city} is {obj_type}, skipping")
+                    return None
+                
+                # Check result matches query
+                result_city = components.get('city', '') or components.get('town', '') or components.get('village', '')
+                if result_city:
+                    result_lower = result_city.lower()
+                    if city_lower not in result_lower and result_lower not in city_lower:
+                        if len(city) > 3 and not result_lower.startswith(city_lower[:3]):
+                            logger.debug(f"OpenCage: name mismatch {city} != {result_city}")
+                            return None
+                
                 state = components.get('state', '')
                 if state:
                     return _format_region(state)
@@ -260,6 +323,13 @@ async def _opencage_geocode(city: str, hint_region: str = None) -> Optional[str]
 async def _nominatim_geocode(city: str) -> Optional[str]:
     """Geocode using Nominatim (OpenStreetMap)."""
     try:
+        # Skip obvious non-cities
+        city_lower = city.lower()
+        if len(city) < 3 or city_lower in ('на', 'над', 'під', 'до', 'рух', 'курс', 'берег', 'море'):
+            return None
+        if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ська'):
+            return None
+        
         url = "https://nominatim.openstreetmap.org/search"
         params = {
             'q': f"{city}, Україна",
@@ -281,7 +351,21 @@ async def _nominatim_geocode(city: str) -> Optional[str]:
                 if not data:
                     return None
                 
+                # Check it's a settlement type
+                osm_type = data[0].get('type', '')
+                osm_class = data[0].get('class', '')
+                if osm_class == 'boundary' and osm_type in ('administrative',):
+                    # Could be region/district - check addressdetails
+                    pass
+                
                 address = data[0].get('address', {})
+                
+                # Verify we got a city/town/village, not just region
+                result_city = address.get('city', '') or address.get('town', '') or address.get('village', '')
+                if not result_city:
+                    logger.debug(f"Nominatim: {city} - no settlement in result")
+                    return None
+                
                 state = address.get('state', '')
                 
                 if state:
