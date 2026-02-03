@@ -515,11 +515,15 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'[💥🛸🛵⚠️❗️🔴🚀✈️👁️]+', '', city)
     city = re.sub(r'^\d+\s*х?\s*', '', city)
     city = re.sub(r'^(?:БПЛА|БпЛА|БПЛA|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
-    city = re.sub(r'^(?:останній|крутиться|кружляє|кружляють|маневрує|маневрують)\s+', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'^(?:останній|крутиться|кружляє|кружляють|маневрує|маневрують|крутяться)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'^(?:між|поміж)\s+', '', city, flags=re.IGNORECASE)
     # Clean movement phrases
     city = re.sub(r'^(?:продовжує\s+рух\s+на|у\s+напрямку|в\s+напрямку|на|рух\s+на)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'^(?:летят\s+в\s+сторону|летить\s+на|пока|поки)\s+', '', city, flags=re.IGNORECASE)
+    # Remove "в/у Чорному морі" phrases
+    city = re.sub(r'\s*[ву]\s+чорному\s+мор[іюя].*$', '', city, flags=re.IGNORECASE)
+    # Remove trailing movement words
+    city = re.sub(r'\s+крутяться\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+щин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+ччин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+чорного\s+моря\s*$', '', city, flags=re.IGNORECASE)
@@ -536,7 +540,7 @@ def _clean_city_name(city: str) -> str:
     if len(city) < 3:
         return ""
     # Skip common non-city words
-    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом'):
+    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом', 'шт'):
         return ""
     if 'невизначеного' in city_lower and 'тип' in city_lower:
         return ""
@@ -552,6 +556,9 @@ def _clean_city_name(city: str) -> str:
         return ""
     # Skip districts (району, район)
     if 'район' in city_lower:
+        return ""
+    # Skip region names (область)
+    if 'область' in city_lower:
         return ""
     # Skip phrases not cities
     if 'центр області' in city_lower or 'маневр' in city_lower:
