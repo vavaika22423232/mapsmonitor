@@ -64,6 +64,14 @@ class Event:
             return False
         if self.region and self.region not in REGIONS and self.region != 'РФ':
             return False
+        # Skip if city is actually a region name
+        if self.city:
+            city_lower = self.city.lower()
+            if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ччина'):
+                return False
+            # Skip adjective forms (Миколаївська, Харківська, etc.)
+            if city_lower.endswith('ська') or city_lower.endswith('ська'):
+                return False
         return bool(self.city and self.region and self.type != ThreatType.UNKNOWN)
     
     def format_message(self) -> str:
