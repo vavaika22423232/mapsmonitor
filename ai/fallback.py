@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from .groq_client import get_client
 from core.event import Event
-from core.constants import ThreatType
+from core.constants import ThreatType, CITY_CASE_TRANSFORMS, REGION_ALIASES, SKIP_WORDS
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,13 @@ def ai_fallback_parse(text: str, source: str = "") -> List[Event]:
     if not text or len(text) < 20:
         return []
     
+    text_lower = text.lower()
+    # Skip AI on non-threat informational text
+    if not any(k in text_lower for k in [
+        'бпла', 'шахед', 'дрон', 'ракета', 'каб', 'пуск', 'вибух', 'обстріл'
+    ]):
+        return []
+
     logger.info(f"AI fallback for: {text[:100]}...")
     
     try:
@@ -44,6 +51,7 @@ def ai_fallback_parse(text: str, source: str = "") -> List[Event]:
         if not results:
             return []
         
+        region_alias_map = {k.lower(): v.lower() for k, v in REGION_ALIASES.items()}
         events = []
         for item in results:
             city = item.get('city', '')
@@ -53,6 +61,30 @@ def ai_fallback_parse(text: str, source: str = "") -> List[Event]:
             if not city or not region:
                 continue
             
+            # Skip if city is a known non-location
+            if city.lower() in SKIP_WORDS:
+                continue
+
+            # Require city or region presence in original text (anti-hallucination)
+            city_lower = city.lower()
+            city_in_text = city_lower in text_lower
+            if not city_in_text:
+                for form, canonical in CITY_CASE_TRANSFORMS.items():
+                    if canonical.lower() == city_lower and form in text_lower:
+                        city_in_text = True
+                        break
+
+            region_lower = region.lower()
+            region_in_text = (
+                region_lower in text_lower
+                or region_lower.replace(' обл.', '') in text_lower
+                or any(alias in text_lower and mapped == region_lower for alias, mapped in region_alias_map.items())
+            )
+
+            if not (city_in_text or region_in_text):
+                logger.info(f"AI skipped hallucinated city: {city}")
+                continue
+
             # Determine threat type
             threat_type = ThreatType.from_string(threat_type_str)
             

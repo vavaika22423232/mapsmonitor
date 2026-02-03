@@ -100,8 +100,8 @@ def normalize_city(city: str) -> str:
     city = _EMOJI_PREFIX.sub('', city).strip()
     city = re.sub(r'[^\w\s\'\-]', '', city, flags=re.UNICODE).strip()
     
-    # Remove prefixes
-    city = re.sub(r'^(Район|бпла|БпЛА|БПЛА)\s+', '', city, flags=re.IGNORECASE).strip()
+    # Remove prefixes (allow glued prefix and Latin A)
+    city = re.sub(r'^(Район|бпла|БпЛА|БПЛА|БПЛA)\s*', '', city, flags=re.IGNORECASE).strip()
     city = re.sub(r'^на\s+', '', city, flags=re.IGNORECASE).strip()
     city = re.sub(r'^Ст\.?\s*', '', city, flags=re.IGNORECASE).strip()
     

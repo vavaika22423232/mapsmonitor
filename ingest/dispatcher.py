@@ -4,6 +4,7 @@ Routes messages through normalization -> extraction -> classification -> dedup -
 """
 import asyncio
 import logging
+import re
 from typing import List, Optional
 
 from .telegram_client import TelegramIngestClient, IncomingMessage
@@ -88,6 +89,11 @@ class MessageDispatcher:
         )
         if is_alert and not has_threat:
             logger.debug("Alert/shelter message skipped")
+            return 0
+
+        # Skip city-only messages without threat keywords
+        if not has_threat and re.match(r'^\W*[А-ЯІЇЄҐа-яіїєґ\'\-]+\W*$', normalized):
+            logger.debug("City-only message skipped (no threat)")
             return 0
 
         # 2. Parse message into events
