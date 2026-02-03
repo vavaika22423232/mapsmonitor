@@ -329,6 +329,21 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
             ))
             return entities
     
+    # Format: "Nx Групи КР курсом на City"
+    match = PATTERNS.location['grupa_kr_kursom'].search(line)
+    if match:
+        count = int(match.group(1)) if match.group(1) else None
+        cities_text = match.group(2)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                count,
+                0.85,
+                'grupa_kr_kursom'
+            ))
+            return entities
+    
     match = PATTERNS.location['bpla_kursom_na'].search(line)
     if match:
         cities_text = match.group(1)
