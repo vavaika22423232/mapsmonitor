@@ -12,12 +12,26 @@ from core.event import Event, ThreatType
 from core.cache import DeduplicationCache
 from parsers.routing import route_message
 from parsers.classification import validate_city_region
-from core.constants import REGION_ALIASES
+from core.constants import REGION_ALIASES, CITY_TO_REGION, SKIP_WORDS
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
 from ai.fallback import ai_fallback_parse, ai_enrich_events
 
 logger = logging.getLogger(__name__)
+
+INFO_ATTACK_KEYWORDS = (
+    'запланував', 'передислокац', 'плануємо', 'планують',
+    'пріоритет для ураження', 'ймовірні цілі', 'майбутн',
+    'попереджений - значить озброєний'
+)
+NEUTRALIZED_KEYWORDS = (
+    'зникла', 'зникли', 'зник на', 'ціль зникла', 'цілі зникли',
+    'збито', 'знищено', 'втрачено ціль', 'втрачена ціль'
+)
+AIRCRAFT_KEYWORDS = (
+    'у повітрі', 'борти ту-', 'борт ту-', 'літак ту-',
+    'бомбардувальник', 'стратегічн', 'з аеродрома', 'з аеродрому'
+)
 
 
 class MessageDispatcher:
@@ -75,6 +89,21 @@ class MessageDispatcher:
                 self._normalize_cache.pop(old_key, None)
         normalized_lower = normalized.lower()
 
+        # 1.0. Skip informational/planned messages
+        if any(k in normalized_lower for k in INFO_ATTACK_KEYWORDS):
+            logger.debug("Informational planned attack message skipped")
+            return 0
+
+        # 1.0. Skip neutralized targets (good news)
+        if any(k in normalized_lower for k in NEUTRALIZED_KEYWORDS):
+            logger.debug("Neutralized target message skipped")
+            return 0
+
+        # 1.0. Skip aircraft status messages
+        if any(k in normalized_lower for k in AIRCRAFT_KEYWORDS):
+            logger.debug("Aircraft status message skipped")
+            return 0
+
         # 1.1. Soft dedup by raw text (avoid repeated channel spam)
         raw_key = normalized_lower.strip()
         if raw_key and self.raw_cache.check_and_add(raw_key):
@@ -118,6 +147,22 @@ class MessageDispatcher:
         
         # 6. Filter invalid events
         events = [e for e in events if e.is_valid]
+
+        # 6.1. Final city validation (must be real city, not region/keyword)
+        filtered = []
+        for event in events:
+            if event.city:
+                city_lower = event.city.lower().strip()
+                if city_lower in SKIP_WORDS:
+                    continue
+                if city_lower.endswith('щина') or city_lower.endswith('ччина'):
+                    continue
+                if 'район' in city_lower or 'р-н' in city_lower:
+                    continue
+                if city_lower not in CITY_TO_REGION:
+                    continue
+            filtered.append(event)
+        events = filtered
         
         if not events:
             logger.debug("No valid events found")
