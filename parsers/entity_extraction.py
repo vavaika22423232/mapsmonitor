@@ -534,6 +534,10 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'р-н\s*$', '', city, flags=re.IGNORECASE)
     # Split glued words like "Очаківсела" -> "Очаків"
     city = re.sub(r'(ів|ка|ки|не|ин|ів)(?:села|міста|району|області)\s*$', r'\1', city, flags=re.IGNORECASE)
+    # Split CamelCase glued words like "ГалициновеМиколаї" -> take first word "Галицинове"
+    camel_match = re.match(r'^([А-ЯІЇЄҐ][а-яіїєґ\']+)([А-ЯІЇЄҐ][а-яіїєґ\']+)$', city)
+    if camel_match:
+        city = camel_match.group(1)  # Take first word only
     if ' та ' in city:
         city = city.split(' та ')[0].strip()
     city = city.strip().rstrip('.,;!?')
