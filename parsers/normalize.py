@@ -103,7 +103,7 @@ def normalize_city(city: str) -> str:
     # Remove prefixes (allow glued prefix and Latin A)
     city = re.sub(r'^(Район|бпла|БпЛА|БПЛА|БПЛA)\s*', '', city, flags=re.IGNORECASE).strip()
     city = re.sub(r'^на\s+', '', city, flags=re.IGNORECASE).strip()
-    city = re.sub(r'^Ст\.?\s*', '', city, flags=re.IGNORECASE).strip()
+    city = re.sub(r'^Ст\.\s*', '', city, flags=re.IGNORECASE).strip()
     
     # Remove region in parentheses from city name
     city = _REGION_SUFFIX.sub('', city).strip()

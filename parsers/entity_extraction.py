@@ -518,9 +518,11 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'^(?:останній|крутиться|кружляє|кружляють|маневрує|маневрують)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'^(?:між|поміж)\s+', '', city, flags=re.IGNORECASE)
     # Clean movement phrases
-    city = re.sub(r'^(?:продовжує\s+рух\s+на|у\s+напрямку|в\s+напрямку|на)\s+', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'^(?:продовжує\s+рух\s+на|у\s+напрямку|в\s+напрямку|на|рух\s+на)\s+', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'^(?:летят\s+в\s+сторону|летить\s+на|пока|поки)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+щин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+ччин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
+    city = re.sub(r'\s+з\s+чорного\s+моря\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+[ву]\s+бік\s+.+$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+курсом\s+на\s+.+$', '', city, flags=re.IGNORECASE)
     if ' та ' in city:
@@ -528,13 +530,19 @@ def _clean_city_name(city: str) -> str:
     city = city.strip().rstrip('.,;!?')
 
     city_lower = city.lower()
+    # Skip garbage
+    if len(city) < 3:
+        return ""
+    # Skip common non-city words
+    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом'):
+        return ""
     if 'невизначеного' in city_lower and 'тип' in city_lower:
         return ""
     if 'бпла' in city_lower or 'шахед' in city_lower:
         return ""
     if city in REGION_ALIASES or city_lower in {k.lower() for k in REGION_ALIASES}:
         return ""
-    if city_lower.endswith('щина') or city_lower.endswith('ччина'):
+    if city_lower.endswith('щина') or city_lower.endswith('ччина') or city_lower.endswith('щини'):
         return ""
     if 'межі' in city_lower or 'межа' in city_lower:
         return ""
@@ -542,6 +550,20 @@ def _clean_city_name(city: str) -> str:
         return ""
     # Skip districts (району, район)
     if 'район' in city_lower:
+        return ""
+    # Skip phrases not cities
+    if 'центр області' in city_lower or 'маневр' in city_lower:
+        return ""
+    # Skip Russian phrases
+    if 'сторону' in city_lower or 'летят' in city_lower or 'пока' in city_lower:
+        return ""
+    # Skip Russian city forms (should be Ukrainian)
+    if city_lower.endswith('ска') or city_lower.endswith('ского'):
+        return ""
+    # Skip incomplete words like "Арий" (truncated "Старий")
+    if city_lower in ('арий', 'арій', 'овий', 'ий', 'ій'):
+        return ""
+    if city_lower.startswith('арий ') or city_lower.startswith('арій '):
         return ""
 
     return city
