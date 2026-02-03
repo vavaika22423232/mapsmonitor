@@ -525,6 +525,8 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'\s+з\s+чорного\s+моря\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+[ву]\s+бік\s+.+$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+курсом\s+на\s+.+$', '', city, flags=re.IGNORECASE)
+    # Remove district suffix "р-н" attached to city name
+    city = re.sub(r'р-н\s*$', '', city, flags=re.IGNORECASE)
     if ' та ' in city:
         city = city.split(' та ')[0].strip()
     city = city.strip().rstrip('.,;!?')
