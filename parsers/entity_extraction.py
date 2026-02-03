@@ -539,8 +539,8 @@ def _clean_city_name(city: str) -> str:
     # Skip garbage
     if len(city) < 3:
         return ""
-    # Skip common non-city words
-    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом', 'шт'):
+    # Skip common non-city words and truncated prefixes
+    if city_lower in ('на', 'над', 'під', 'до', 'від', 'через', 'біля', 'коло', 'рух', 'курс', 'курсом', 'шт', 'кам', 'сам', 'дні', 'хар', 'пол', 'оде', 'мик', 'зап'):
         return ""
     if 'невизначеного' in city_lower and 'тип' in city_lower:
         return ""
