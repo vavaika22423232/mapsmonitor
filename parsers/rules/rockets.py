@@ -19,6 +19,10 @@ def parse_rockets(text: str, channel: str = None) -> List[Event]:
     if events:
         return events
     
+    events = _parse_grupa_kr(text, channel)
+    if events:
+        return events
+    
     events = _parse_rocket_city(text, channel)
     if events:
         return events
@@ -100,5 +104,28 @@ def _parse_highspeed_city(text: str, channel: str) -> List[Event]:
         region=region,
         source=channel or "",
         confidence=0.95,
+        raw_text=text
+    )]
+
+
+def _parse_grupa_kr(text: str, channel: str) -> List[Event]:
+    """Parse 'Група КР курсом на City' format."""
+    match = PATTERNS.location['grupa_kr_kursom'].search(text)
+    if not match:
+        return []
+    
+    count = int(match.group(1)) if match.group(1) else None
+    city = normalize_city(match.group(2).strip())
+    region = get_region_for_city(city)
+    if not city or not region:
+        return []
+    
+    return [Event(
+        type=ThreatType.ROCKET,
+        city=city,
+        region=region,
+        count=count,
+        source=channel or "",
+        confidence=0.9,
         raw_text=text
     )]
