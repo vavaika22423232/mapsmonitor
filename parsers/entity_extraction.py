@@ -517,6 +517,8 @@ def _clean_city_name(city: str) -> str:
     city = re.sub(r'^(?:БПЛА|БпЛА|БПЛA|шахед[іиів]*)\s*', '', city, flags=re.IGNORECASE)
     city = re.sub(r'^(?:останній|крутиться|кружляє|кружляють|маневрує|маневрують)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'^(?:між|поміж)\s+', '', city, flags=re.IGNORECASE)
+    # Clean movement phrases
+    city = re.sub(r'^(?:продовжує\s+рух\s+на|у\s+напрямку|в\s+напрямку|на)\s+', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+щин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+з\s+\S+ччин[иіу]?\s*$', '', city, flags=re.IGNORECASE)
     city = re.sub(r'\s+[ву]\s+бік\s+.+$', '', city, flags=re.IGNORECASE)
@@ -537,6 +539,9 @@ def _clean_city_name(city: str) -> str:
     if 'межі' in city_lower or 'межа' in city_lower:
         return ""
     if city_lower.startswith('з '):
+        return ""
+    # Skip districts (району, район)
+    if 'район' in city_lower:
         return ""
 
     return city
