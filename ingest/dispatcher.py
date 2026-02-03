@@ -147,22 +147,6 @@ class MessageDispatcher:
         
         # 6. Filter invalid events
         events = [e for e in events if e.is_valid]
-
-        # 6.1. Final city validation (must be real city, not region/keyword)
-        filtered = []
-        for event in events:
-            if event.city:
-                city_lower = event.city.lower().strip()
-                if city_lower in SKIP_WORDS:
-                    continue
-                if city_lower.endswith('щина') or city_lower.endswith('ччина'):
-                    continue
-                if 'район' in city_lower or 'р-н' in city_lower:
-                    continue
-                if city_lower not in CITY_TO_REGION:
-                    continue
-            filtered.append(event)
-        events = filtered
         
         if not events:
             logger.debug("No valid events found")
