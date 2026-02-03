@@ -1,6 +1,7 @@
 """
 Geocoding utilities - city to region resolution.
 Uses local dictionary first, then external APIs.
+Priority: Visicom -> OpenCage -> Nominatim
 """
 import os
 import json
@@ -14,7 +15,8 @@ from core.constants import CITIES, CITY_TO_REGION
 
 logger = logging.getLogger(__name__)
 
-# OpenCage API key (optional)
+# API keys
+VISICOM_API_KEY = os.environ.get('VISICOM_API_KEY', '')
 OPENCAGE_API_KEY = os.environ.get('OPENCAGE_API_KEY', '')
 
 # Cache for geocoding results
@@ -112,24 +114,106 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
     
     cache_key = city.lower()
     
-    # Try OpenCage
+    # Try Visicom first (Ukrainian API, best for Ukrainian cities)
+    if VISICOM_API_KEY:
+        result = await _visicom_geocode(city, hint_region)
+        if result:
+            _cache[cache_key] = result
+            _save_cache()
+            logger.info(f"Visicom: {city} -> {result}")
+            return result
+    
+    # Fallback to OpenCage
     if OPENCAGE_API_KEY:
         result = await _opencage_geocode(city, hint_region)
         if result:
             _cache[cache_key] = result
             _save_cache()
+            logger.info(f"OpenCage: {city} -> {result}")
             return result
     
-    # Try Nominatim
+    # Last resort: Nominatim
     result = await _nominatim_geocode(city)
     if result:
         _cache[cache_key] = result
         _save_cache()
+        logger.info(f"Nominatim: {city} -> {result}")
         return result
     
     # Mark as not found
     _cache[cache_key] = None
     _save_cache()
+    return None
+
+
+async def _visicom_geocode(city: str, hint_region: str = None) -> Optional[str]:
+    """Geocode using Visicom API (Ukrainian geocoder)."""
+    try:
+        query = f"{city}, Україна"
+        if hint_region:
+            region_clean = hint_region.replace('обл.', '').replace('область', '').strip()
+            query = f"{city}, {region_clean}, Україна"
+        
+        url = "https://api.visicom.ua/data-api/5.0/uk/geocode.json"
+        params = {
+            'text': query,
+            'key': VISICOM_API_KEY,
+            'country': 'ua',
+            'limit': 1
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=5) as response:
+                if response.status == 402 or response.status == 403:
+                    logger.warning("Visicom quota/auth error")
+                    return None
+                
+                if not response.ok:
+                    logger.debug(f"Visicom error: {response.status}")
+                    return None
+                
+                data = await response.json()
+                
+                # Visicom returns features array
+                features = data.get('features', [])
+                if not features:
+                    return None
+                
+                props = features[0].get('properties', {})
+                
+                # Check it's in Ukraine
+                country = props.get('country', '')
+                if country and 'україн' not in country.lower() and 'ukrain' not in country.lower():
+                    return None
+                
+                # Get region (область)
+                region = props.get('settlement_type') or props.get('region') or props.get('admin_level_4')
+                if not region:
+                    # Try other fields
+                    region = props.get('name')
+                    if region and ('область' in region.lower() or 'обл' in region.lower()):
+                        pass
+                    else:
+                        region = None
+                
+                # Alternative: parse from address
+                if not region:
+                    address = props.get('address', '')
+                    if 'область' in address.lower():
+                        parts = address.split(',')
+                        for part in parts:
+                            if 'область' in part.lower() or 'обл.' in part.lower():
+                                region = part.strip()
+                                break
+                
+                if region:
+                    return _format_region(region)
+        
+    except asyncio.TimeoutError:
+        logger.debug(f"Visicom timeout for {city}")
+    except Exception as e:
+        logger.debug(f"Visicom error: {e}")
+    
     return None
 
 
