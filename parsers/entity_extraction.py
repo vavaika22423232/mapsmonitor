@@ -534,6 +534,10 @@ def _clean_city_name(city: str) -> str:
         return ""
     if city_lower.endswith('щина') or city_lower.endswith('ччина'):
         return ""
+    if 'межі' in city_lower or 'межа' in city_lower:
+        return ""
+    if city_lower.startswith('з '):
+        return ""
 
     return city
 
