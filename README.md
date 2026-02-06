@@ -13,10 +13,18 @@
 
 ## 🧱 Архітектура
 
+```
+Telegram → Ingest (telegram_client) → Dispatcher → route_message → Event → format_message → Send
+                     ↓
+              normalize_text → extract_entities → geocode_city → validate → dedup
+```
+
 - **Ingest**: підключення до Telegram та опитування каналів
-- **Parsing**: нормалізація → правила → виділення сутностей
+- **Parsing**: нормалізація → правила (parsers/rules/) → виділення сутностей
 - **Core**: єдина модель `Event` та дедуп‑кеш
 - **Geo**: геокодування міст через utils.geo (словник + кеш + API)
+
+Нові паттерни додаються в [parsers/patterns.py](parsers/patterns.py), правила в [parsers/rules/](parsers/rules/)
 
 ## ✅ Вимоги
 
@@ -90,6 +98,8 @@ TARGET_CHANNEL=mapstransler
 POLL_INTERVAL=30
 DEDUP_INTERVAL=300
 LOG_LEVEL=INFO
+LOG_FORMAT=default  # or 'json' for structured logs
+HEALTH_CHECK_PORT=8080  # optional, enables /health endpoint
 ```
 
 ## 🧪 Локальний запуск
@@ -122,6 +132,7 @@ pre-commit install
 
 ## 🛠️ Технічні деталі
 
+- **geocode_cache.json**: Кеш геокодування. Може бути локальним (.gitignore) або закомічений для швидкого холодного старту
 - **Режим роботи**: Polling (опитування кожні 30 секунд)
 - **Чому не events?**: Telegram User API не отримує real‑time події з публічних каналів
 - **Сесія**: Зберігається в `test_session.session`

@@ -64,9 +64,11 @@ class Event:
             return False
         if self.region and self.region not in REGIONS and self.region != 'РФ':
             return False
-        # Skip if city is actually a region name
+        # Skip if city is actually a region name or pseudo-location (над містом, над селом)
         if self.city:
             city_lower = self.city.lower()
+            if city_lower in ('містом', 'селом'):
+                return False
             if 'область' in city_lower or city_lower.endswith('щина') or city_lower.endswith('ччина'):
                 return False
             # Skip adjective forms (Миколаївська, Харківська, etc.)

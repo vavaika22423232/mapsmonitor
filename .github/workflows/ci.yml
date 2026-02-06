@@ -24,4 +24,4 @@ jobs:
       - name: Format check
         run: ruff format --check .
       - name: Tests
-        run: pytest -q
+        run: pytest -q --cov=parsers --cov=core --cov=ingest --cov=utils --cov-report=term-missing --cov-fail-under=40

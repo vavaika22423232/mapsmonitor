@@ -15,6 +15,11 @@ from core.constants import CITIES, CITY_TO_REGION
 
 logger = logging.getLogger(__name__)
 
+try:
+    from utils.metrics import get_metrics
+except ImportError:
+    get_metrics = None
+
 # API keys
 VISICOM_API_KEY = os.environ.get('VISICOM_API_KEY', '')
 OPENCAGE_API_KEY = os.environ.get('OPENCAGE_API_KEY', '')
@@ -151,12 +156,16 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
     # Check local first
     result = get_region_for_city(city, hint_region)
     if result:
+        if get_metrics:
+            get_metrics().geocode_cache_hit += 1
         return result
-    
+
     cache_key = city_lower
     
     # Try Visicom first (Ukrainian API, best for Ukrainian cities)
     if VISICOM_API_KEY:
+        if get_metrics:
+            get_metrics().geocode_api_called += 1
         result = await _visicom_geocode(city, hint_region)
         if result:
             _cache[cache_key] = result
@@ -166,6 +175,8 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
     
     # Fallback to OpenCage
     if OPENCAGE_API_KEY:
+        if get_metrics:
+            get_metrics().geocode_api_called += 1
         result = await _opencage_geocode(city, hint_region)
         if result:
             _cache[cache_key] = result
@@ -174,6 +185,8 @@ async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
             return result
     
     # Last resort: Nominatim
+    if get_metrics:
+        get_metrics().geocode_api_called += 1
     result = await _nominatim_geocode(city)
     if result:
         _cache[cache_key] = result

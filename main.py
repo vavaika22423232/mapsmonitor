@@ -8,6 +8,7 @@ import logging
 
 from ingest.dispatcher import create_and_run_dispatcher
 from utils.logging import setup_logging
+from utils.health import maybe_start_health_server
 
 
 def _get_env_int(name: str, default: int) -> int:
@@ -44,14 +45,31 @@ def main():
         logger.error("TELEGRAM_API_ID must be numeric")
         sys.exit(1)
     
-    sources = os.getenv(
-        'SOURCE_CHANNELS',
-        'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,povitryanatrivogaaa,'
-        'raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,'
-        'sectorv666,vanek_nikolaev,monitor1654'
-    ).split(',')
-    target = os.getenv('TARGET_CHANNEL', 'mapstransler')
-    
+    sources = [
+        s.strip() for s in os.getenv(
+            'SOURCE_CHANNELS',
+            'UkraineAlarmSignal,war_monitor,napramok,ukrainsiypposhnik,povitryanatrivogaaa,'
+            'raketa_trevoga,monikppy,radarraketppo,korabely_media,odessaveter,'
+            'sectorv666,vanek_nikolaev,monitor1654'
+        ).split(',')
+        if s.strip()
+    ]
+    target = (os.getenv('TARGET_CHANNEL', 'mapstransler') or '').strip()
+
+    if not sources:
+        logger.error("SOURCE_CHANNELS must not be empty")
+        sys.exit(1)
+    if not target:
+        logger.error("TARGET_CHANNEL must not be empty")
+        sys.exit(1)
+
+    if not os.getenv('GROQ_API_KEY'):
+        logger.debug("GROQ_API_KEY not set (optional, AI fallback disabled)")
+    if not os.getenv('VISICOM_API_KEY') and not os.getenv('OPENCAGE_API_KEY'):
+        logger.warning("No geocoding API key set (VISICOM_API_KEY or OPENCAGE_API_KEY)")
+
+    maybe_start_health_server()
+
     poll_interval = _get_env_int('POLL_INTERVAL', 30)
     dedup_interval = _get_env_int('DEDUP_INTERVAL', 300)
     

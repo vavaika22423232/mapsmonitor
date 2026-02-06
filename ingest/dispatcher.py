@@ -19,6 +19,27 @@ from parsers.patterns import PATTERNS
 
 logger = logging.getLogger(__name__)
 
+try:
+    from utils.metrics import get_metrics
+except ImportError:
+    get_metrics = None
+
+
+async def _enrich_regions(events: list) -> None:
+    """Enrich events with missing region via parallel geocoding."""
+    to_enrich = [(i, e) for i, e in enumerate(events) if e.city and not e.region]
+    if not to_enrich:
+        return
+    indices, evts = zip(*to_enrich)
+    tasks = [geocode_city(e.city) for e in evts]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for idx, result in zip(indices, results):
+        if isinstance(result, Exception):
+            logger.debug(f"Geocode failed for {events[idx].city}: {result}")
+        elif result:
+            events[idx].region = result
+
+
 INFO_ATTACK_KEYWORDS = (
     'запланував', 'передислокац', 'плануємо', 'планують',
     'пріоритет для ураження', 'ймовірні цілі', 'майбутн',
@@ -125,13 +146,11 @@ class MessageDispatcher:
 
         # 2. Parse message into events
         events = route_message(message.text, message.channel)
+        if get_metrics:
+            get_metrics().events_parsed += len(events)
 
-        # 2.5. Enrich events with empty region via geocode (cache + API)
-        for event in events:
-            if event.city and not event.region:
-                region = await geocode_city(event.city)
-                if region:
-                    event.region = region
+        # 2.5. Enrich events with empty region via geocode (cache + API) - parallel
+        await _enrich_regions(events)
 
         # 3. Local validation on parsed events (skip if header region exists)
         header_region = _detect_region_header(normalized)
@@ -168,6 +187,8 @@ class MessageDispatcher:
             
             if await self.telegram.send_message(formatted, media):
                 sent += 1
+                if get_metrics:
+                    get_metrics().events_sent += 1
                 logger.info(f"Sent: {formatted}")
                 await asyncio.sleep(0.5)  # Rate limiting
         
@@ -196,6 +217,8 @@ class MessageDispatcher:
                 
             except asyncio.CancelledError:
                 logger.info("Polling loop cancelled")
+                if get_metrics:
+                    get_metrics().log()
                 break
             except Exception as e:
                 logger.error(f"Polling loop error: {e}")
