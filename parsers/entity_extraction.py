@@ -328,6 +328,20 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
 
     entities: List[ExtractedEntity] = []
     
+    match = PATTERNS.location['from_city_to_city'].search(line)
+    if match:
+        count = int(match.group(1)) if match.group(1) else None
+        cities_text = match.group(3)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                count,
+                0.85,
+                'from_city_to_city'
+            ))
+            return entities
+    
     match = PATTERNS.location['count_threat_na_city'].search(line)
     if match:
         count = int(match.group(1))

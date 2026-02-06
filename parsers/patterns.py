@@ -129,6 +129,16 @@ LOCATION = PatternGroup({
         r'([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s/,]+)'
     ),
 
+    # Format: "N шахед від City на City"
+    'from_city_to_city': _compile(
+        r'[•▪️\s]*'
+        r'(?:(\d+)\s*х?\s*)?'
+        r'(?:шахед[іиів]*|БпЛА|БПЛА)\s+'
+        r'від\s+([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s]+?)\s+'
+        r'(?:на|у\s+напрямку|в\s+напрямку)\s+'
+        r'([А-ЯІЇЄҐа-яіїєґ0-9\'\-\s/,]+)'
+    ),
+
     # Format: "N на City" (when region context is known)
     'count_na_city': _compile(
         r'[•▪️\s]*'
