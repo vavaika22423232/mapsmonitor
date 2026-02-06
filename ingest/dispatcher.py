@@ -13,10 +13,9 @@ from core.cache import DeduplicationCache
 from parsers.routing import route_message
 from utils.geo import geocode_city
 from parsers.classification import validate_city_region
-from core.constants import REGION_ALIASES, CITY_TO_REGION, SKIP_WORDS
+from core.constants import REGION_ALIASES
 from parsers.normalize import normalize_text
 from parsers.patterns import PATTERNS
-from ai.fallback import ai_fallback_parse, ai_enrich_events
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +49,11 @@ class MessageDispatcher:
     def __init__(
         self,
         telegram_client: TelegramIngestClient,
-        dedup_ttl: int = 300,
-        use_ai_fallback: bool = True
+        dedup_ttl: int = 300
     ):
         self.telegram = telegram_client
         self.cache = DeduplicationCache(ttl_seconds=dedup_ttl)
         self.raw_cache = DeduplicationCache(ttl_seconds=120)
-        self.use_ai_fallback = use_ai_fallback
         self._normalize_cache = {}
         self._normalize_cache_order = []
         
@@ -111,7 +108,7 @@ class MessageDispatcher:
             logger.debug("Raw text duplicate skipped")
             return 0
 
-        # 2. Skip alert-only messages to avoid AI fallback noise
+        # 2. Skip alert-only messages without threat keywords
         is_alert = PATTERNS.skip['alerts'].search(normalized) or PATTERNS.skip['shelter'].search(normalized)
         has_threat = (
             PATTERNS.threat_type.match_any(normalized)
@@ -145,22 +142,14 @@ class MessageDispatcher:
                     if corrected:
                         event.region = corrected
 
-        # 4. AI enrich (max AI) on parsed events
-        if events and self.use_ai_fallback:
-            events = ai_enrich_events(events, message.text)
-        
-        # 5. AI fallback if no events found
-        if not events and self.use_ai_fallback:
-            events = ai_fallback_parse(message.text, message.channel)
-        
-        # 6. Filter invalid events
+        # 4. Filter invalid events
         events = [e for e in events if e.is_valid]
         
         if not events:
             logger.debug("No valid events found")
             return 0
         
-        # 7. Deduplicate and send
+        # 5. Deduplicate and send
         sent = 0
         for event in events:
             # Check deduplication
@@ -280,7 +269,6 @@ async def create_and_run_dispatcher(
     dispatcher = MessageDispatcher(
         telegram_client=client,
         dedup_ttl=dedup_ttl,
-        use_ai_fallback=True
     )
     
     # Run

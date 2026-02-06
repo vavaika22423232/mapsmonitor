@@ -21,7 +21,5 @@ services:
         value: "30"
       - key: DEDUP_INTERVAL
         value: "300"
-      - key: GROQ_API_KEY
-        sync: false
       - key: LOG_LEVEL
         value: "INFO"

@@ -1,5 +1,1 @@
-"""AI module - Groq client and fallback logic."""
-from .groq_client import GroqClient
-from .fallback import ai_fallback_parse, ai_enrich_events
-
-__all__ = ['GroqClient', 'ai_fallback_parse', 'ai_enrich_events']
+"""AI module - reserved for future enhancements."""

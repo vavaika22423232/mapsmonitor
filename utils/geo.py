@@ -61,7 +61,7 @@ def get_region_for_city(city: str, hint: str = None) -> Optional[str]:
     Priority:
     1. Local CITIES dictionary (instant)
     2. Geocode cache (instant)
-    3. AI fallback (if available)
+    3. Hint if provided
     
     Args:
         city: City name (normalized)

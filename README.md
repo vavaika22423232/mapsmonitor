@@ -1,4 +1,4 @@
-﻿# Telegram Channel Forwarder
+# Telegram Channel Forwarder
 
 Автоматичне пересилання повідомлень з українських каналів тривоги до вашого Telegram‑каналу.
 
@@ -6,7 +6,7 @@
 
 - ✅ Модульна архітектура (інгест → парсинг → дедуп → відправка)
 - ✅ Правила парсингу з пріоритетами та precompiled regex
-- ✅ AI‑fallback (опційно, Groq) при провалі правил
+- ✅ Rule-based парсинг з геокодінгом (CITIES + кеш + Visicom/OpenCage/Nominatim)
 - ✅ Підтримка медіа
 - ✅ Polling режим (перевірка кожні 30 секунд)
 - ✅ Готовий до деплою на Render.com
@@ -16,7 +16,7 @@
 - **Ingest**: підключення до Telegram та опитування каналів
 - **Parsing**: нормалізація → правила → виділення сутностей
 - **Core**: єдина модель `Event` та дедуп‑кеш
-- **AI fallback**: резервний парсинг через Groq (опційно)
+- **Geo**: геокодування міст через utils.geo (словник + кеш + API)
 
 ## ✅ Вимоги
 
@@ -60,7 +60,6 @@ python3 -c "from telethon.sync import TelegramClient; from telethon.sessions imp
    - `SOURCE_CHANNELS` - список каналів через кому
    - `POLL_INTERVAL` - інтервал перевірки в секундах (за замовчуванням 30)
    - `DEDUP_INTERVAL` - дедуплікація в секундах (за замовчуванням 300)
-   - `GROQ_API_KEY` - опційно для AI‑fallback
 
 5. Deploy!
 
@@ -90,7 +89,6 @@ SOURCE_CHANNELS=UkraineAlarmSignal,kpszsu,war_monitor,napramok,raketa_trevoga,uk
 TARGET_CHANNEL=mapstransler
 POLL_INTERVAL=30
 DEDUP_INTERVAL=300
-GROQ_API_KEY=<optional>
 LOG_LEVEL=INFO
 ```
 
