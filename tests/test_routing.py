@@ -36,3 +36,21 @@ def test_route_launch_message():
     events = route_message(text, "test")
     assert events
     assert events[0].type == ThreatType.LAUNCH
+    assert "Пуск РФ (" in events[0].format_message()
+
+
+def test_route_recon():
+    text = "Розвідувальний БПЛА курсом на Київ (Київська обл.)"
+    events = route_message(text, "test")
+    assert events
+    assert events[0].type == ThreatType.RECON
+    assert events[0].city == "Київ"
+    assert "Разведка" in events[0].format_message()
+
+
+def test_format_explosion_unified():
+    events = route_message("Київ - вибухи", "test")
+    assert events
+    msg = events[0].format_message()
+    assert msg.startswith("Вибухи ")
+    assert "Київ" in msg

@@ -90,6 +90,32 @@ def get_region_for_city(city: str, hint: str = None) -> Optional[str]:
     return hint
 
 
+def geocode_city_sync(city: str, hint_region: str = None) -> Optional[str]:
+    """
+    Sync version of geocode_city - uses cache only, no API calls.
+    Use for patterns where we need region but are in sync context.
+    """
+    if not city:
+        return None
+    
+    city_lower = city.lower().strip()
+    if len(city) < 3:
+        return None
+    
+    # Check local dictionary
+    if city in CITIES:
+        return CITIES[city]
+    region = CITY_TO_REGION.get(city_lower)
+    if region:
+        return region
+    
+    # Check cache
+    if city_lower in _cache:
+        return _cache[city_lower]
+    
+    return hint_region
+
+
 async def geocode_city(city: str, hint_region: str = None) -> Optional[str]:
     """
     Geocode city using external API.

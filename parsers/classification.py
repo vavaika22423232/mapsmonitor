@@ -35,9 +35,11 @@ def classify_threat(text: str) -> ThreatType:
         return ThreatType.KAB
     if '💥' in text or 'вибух' in text_lower:
         return ThreatType.EXPLOSION
+    if any(x in text_lower for x in ['розвідк', 'розвідувальн', 'розвідувальний бпла', 'бпла-розвідник']):
+        return ThreatType.RECON
     if any(x in text_lower for x in ['бпла', 'шахед', 'герань', 'мопед', 'балалайк']):
         return ThreatType.BPLA
-    
+
     return ThreatType.UNKNOWN
 
 

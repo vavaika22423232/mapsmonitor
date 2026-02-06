@@ -9,6 +9,7 @@ from enum import Enum
 class ThreatType(Enum):
     """Threat classification types."""
     BPLA = "БПЛА"
+    RECON = "Разведка"
     ROCKET = "Ракета"
     KAB = "КАБ"
     BALLISTIC = "Балістика"
@@ -21,6 +22,8 @@ class ThreatType(Enum):
         """Parse threat type from various string formats."""
         s_lower = s.lower()
         
+        if any(x in s_lower for x in ['розвідк', 'розвідувальн', 'розвідувальний бпла', 'бпла-розвідник']):
+            return cls.RECON
         if any(x in s_lower for x in ['бпла', 'шахед', 'герань', 'мопед', 'балалайк', 'drone']):
             return cls.BPLA
         if any(x in s_lower for x in ['ракет', 'калібр', 'cruise', 'крилат']):

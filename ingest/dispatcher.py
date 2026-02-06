@@ -11,6 +11,7 @@ from .telegram_client import TelegramIngestClient, IncomingMessage
 from core.event import Event, ThreatType
 from core.cache import DeduplicationCache
 from parsers.routing import route_message
+from utils.geo import geocode_city
 from parsers.classification import validate_city_region
 from core.constants import REGION_ALIASES, CITY_TO_REGION, SKIP_WORDS
 from parsers.normalize import normalize_text
@@ -127,6 +128,13 @@ class MessageDispatcher:
 
         # 2. Parse message into events
         events = route_message(message.text, message.channel)
+
+        # 2.5. Enrich events with empty region via geocode (cache + API)
+        for event in events:
+            if event.city and not event.region:
+                region = await geocode_city(event.city)
+                if region:
+                    event.region = region
 
         # 3. Local validation on parsed events (skip if header region exists)
         header_region = _detect_region_header(normalized)

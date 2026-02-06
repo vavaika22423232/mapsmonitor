@@ -10,6 +10,7 @@ import logging
 from .patterns import PATTERNS
 from .normalize import normalize_city, normalize_region, extract_region_from_alias, is_skip_word
 from core.constants import CITIES, REGION_ALIASES, CHANNEL_REGIONS
+from utils.geo import get_region_for_city
 
 REGION_ALIASES_LOWER = {k.lower() for k in REGION_ALIASES}
 SUMMARY_COUNT_RE = re.compile(r'^\s*[А-ЯІЇЄҐа-яіїєґ\s]+—\s*\d+х\s*$')
@@ -110,6 +111,11 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
             entities.append(entity)
             continue
 
+        entity = _extract_kursom_na_city_region(line)
+        if entity:
+            entities.append(entity)
+            continue
+
         entity = _extract_city_region_alias_parens(line)
         if entity:
             entities.append(entity)
@@ -118,6 +124,12 @@ def extract_entities(text: str, channel: str = None) -> List[ExtractedEntity]:
         region_cities = _extract_region_colon_cities(line, current_region)
         if region_cities:
             entities.extend(region_cities)
+            continue
+        
+        # "✈️ City/р-н - обережно по БПЛА!" - extract city and geocode
+        oberezhno_entities = _extract_oberezhno_bpla(line)
+        if oberezhno_entities:
+            entities.extend(oberezhno_entities)
             continue
         
         context_entities = _extract_with_context(line, current_region)
@@ -198,6 +210,35 @@ def _extract_city_region_parens(line: str) -> Optional[ExtractedEntity]:
     )
 
 
+def _extract_kursom_na_city_region(line: str) -> Optional[ExtractedEntity]:
+    """Extract from 'X курсом на City (Region обл.)' format."""
+    match = PATTERNS.location['kursom_na_city_region'].search(line)
+    if not match:
+        return None
+
+    city_raw = match.group(1).strip()
+    region_raw = match.group(2).strip()
+
+    city = _clean_city_name(city_raw)
+    if not city or is_skip_word(city):
+        return None
+
+    if city in REGION_ALIASES:
+        return None
+
+    city = normalize_city(city)
+    region = normalize_region(region_raw)
+    if not region:
+        return None
+
+    return ExtractedEntity(
+        city=city,
+        region=region,
+        confidence=0.9,
+        pattern_name='kursom_na_city_region'
+    )
+
+
 def _extract_city_region_alias_parens(line: str) -> Optional[ExtractedEntity]:
     match = PATTERNS.location['city_region_alias_parens'].search(line)
     if not match:
@@ -252,6 +293,32 @@ def _extract_region_colon_cities(line: str, default_region: str = None) -> List[
             ))
     
     return entities
+
+
+def _extract_oberezhno_bpla(line: str) -> List[ExtractedEntity]:
+    """Extract city from '✈️ City/р-н - обережно по БПЛА!' pattern."""
+    match = PATTERNS.location['oberezhno_bpla'].search(line)
+    if not match:
+        return []
+    
+    city_raw = match.group(1).strip()
+    city = _clean_city_name(city_raw)
+    if not city or is_skip_word(city):
+        return []
+    
+    city = normalize_city(city)
+    
+    # Get region from geo (CITIES + cache)
+    region = get_region_for_city(city)
+    if not region:
+        return []
+    
+    return [ExtractedEntity(
+        city=city,
+        region=region,
+        confidence=0.85,
+        pattern_name='oberezhno_bpla'
+    )]
 
 
 def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntity]:
@@ -339,6 +406,20 @@ def _extract_with_context(line: str, current_region: str) -> List[ExtractedEntit
                 None,
                 0.85,
                 'bpla_kursom_na'
+            ))
+            return entities
+    
+    # "✈️ City/р-н - обережно по БПЛА!"
+    match = PATTERNS.location['oberezhno_bpla'].search(line)
+    if match:
+        cities_text = match.group(1)
+        if cities_text:
+            entities.extend(_build_entities_from_city_list(
+                cities_text,
+                region,
+                None,
+                0.85,
+                'oberezhno_bpla'
             ))
             return entities
     
@@ -667,10 +748,3 @@ def _is_valid_entity(entity: ExtractedEntity) -> bool:
     return True
 
 
-def get_region_for_city(city: str, hint_region: str = None) -> Optional[str]:
-    if city in CITIES:
-        return CITIES[city]
-    city_cap = city[0].upper() + city[1:] if city else city
-    if city_cap in CITIES:
-        return CITIES[city_cap]
-    return hint_region

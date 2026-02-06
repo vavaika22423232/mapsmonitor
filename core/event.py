@@ -58,7 +58,7 @@ class Event:
         """Check if event has minimum required data."""
         if self.type == ThreatType.BALLISTIC and not self.city:
             return True
-        if self.type == ThreatType.LAUNCH and self.city:
+        if self.type == ThreatType.LAUNCH and self.region == 'РФ':
             return True
         if self.region and self.region.lower().startswith('невідом'):
             return False
@@ -80,7 +80,7 @@ class Event:
             return ""
         
         if self.type == ThreatType.EXPLOSION:
-            return f"{self.city} ({self.region})\nвибухи."
+            return f"Вибухи {self.city} ({self.region})"
         
         if self.type == ThreatType.BALLISTIC:
             if 'відбій' in (self.raw_text or '').lower():
@@ -90,11 +90,9 @@ class Event:
             return "Загроза балістики!"
 
         if self.type == ThreatType.LAUNCH:
-            if self.city and self.region:
-                return f"Пуск {self.city} ({self.region})"
             if self.city:
-                return f"Пуск {self.city}"
-            return "Пуск БПЛА"
+                return f"Пуск РФ ({self.city})"
+            return "Пуск РФ"
         
         return f"{self.type.value} {self.city} ({self.region})"
     
